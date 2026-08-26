@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check System Config</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .config-section { border: 1px solid #ddd; margin: 10px 0; padding: 15px; border-radius: 5px; }
+        .logo-test { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        .error { color: red; }
+        .success { color: green; }
+        .warning { color: orange; }
+    </style>
+</head>
+<body>
+    <h1>🔍 System Config & Logo Debug Tool</h1>
+    
+    <div class="config-section">
+        <h3>Quick Actions</h3>
+        <button onclick="window.open('http://localhost:5175', '_blank')">Open App</button>
+        <button onclick="checkFirebaseConnection()">Test Firebase Connection</button>
+        <button onclick="clearCache()">Clear Cache & Reload</button>
+    </div>
+
+    <div class="config-section">
+        <h3>🎯 Debug Instructions</h3>
+        <ol>
+            <li><strong>Open the app:</strong> Click "Open App" button above</li>
+            <li><strong>Open Developer Tools:</strong> Press F12 or right-click → Inspect</li>
+            <li><strong>Go to Console tab:</strong> Look for logo debug messages</li>
+            <li><strong>Login:</strong> Use your admin credentials</li>
+            <li><strong>Check console for these messages:</strong>
+                <ul>
+                    <li><code>🎯 useSystemConfig: getPrimaryLogo called</code></li>
+                    <li><code>Config loaded: true/false</code></li>
+                    <li><code>Logo value: "actual-url" or empty/null</code></li>
+                    <li><code>🔍 LogoDisplay: useEffect triggered</code></li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div class="config-section">
+        <h3>📋 Expected Debug Output</h3>
+        <div class="logo-test">
+            <h4>If logo is working properly:</h4>
+            <pre>🎯 useSystemConfig: getPrimaryLogo called
+   - Config loaded: true
+   - Logo value: "https://firebasestorage.googleapis.com/..." or "data:image/..."
+   - Logo length: [some number > 0]
+🔍 LogoDisplay: useEffect triggered with URL: [actual URL]
+✅ LogoDisplay: Image loaded successfully</pre>
+        </div>
+        
+        <div class="logo-test">
+            <h4 class="error">If logo is broken (current issue):</h4>
+            <pre class="error">🎯 useSystemConfig: getPrimaryLogo called
+   - Config loaded: true
+   - Logo value: empty/null
+   - Logo length: 0
+🔍 LogoDisplay: useEffect triggered with URL: (empty)
+⚠️ LogoDisplay: No valid URL provided, showing fallback</pre>
+        </div>
+    </div>
+
+    <div class="config-section">
+        <h3>🚀 Quick Fixes to Try</h3>
+        <ol>
+            <li><strong>Check System Settings:</strong> 
+                <ul>
+                    <li>Login as admin</li>
+                    <li>Go to System Settings → Branding tab</li>
+                    <li>Check if "Current Logo" section shows an image</li>
+                    <li>If no image, upload a new logo (PNG/JPG < 1MB)</li>
+                </ul>
+            </li>
+            <li><strong>Firebase Storage Check:</strong>
+                <ul>
+                    <li>Go to Firebase Console</li>
+                    <li>Check Storage → branding folder</li>
+                    <li>Ensure logo files exist and are accessible</li>
+                </ul>
+            </li>
+            <li><strong>Hard Reset:</strong>
+                <ul>
+                    <li>Clear browser cache (Ctrl+Shift+Delete)</li>
+                    <li>Refresh page (Ctrl+Shift+R)</li>
+                    <li>Try incognito/private browsing mode</li>
+                </ul>
+            </li>
+        </ol>
+    </div>
+
+    <div id="results"></div>
+
+    <script>
+        console.log('🔧 System Config Debug Tool loaded at', new Date().toLocaleString());
+        
+        function checkFirebaseConnection() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<div class="config-section warning"><h4>🔄 Checking Firebase connection...</h4><p>Check the main app console for connection results.</p></div>';
+            
+            // This will only work if we're on the same domain as the app
+            try {
+                window.open('http://localhost:5175', '_blank');
+            } catch (error) {
+                console.error('Could not open app window:', error);
+            }
+        }
+        
+        function clearCache() {
+            if ('caches' in window) {
+                caches.keys().then(function(names) {
+                    names.forEach(function(name) {
+                        caches.delete(name);
+                    });
+                });
+            }
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.reload(true);
+        }
+        
+        // Monitor for any global errors
+        window.addEventListener('error', function(e) {
+            console.error('Global error caught:', e.error);
+        });
+        
+        console.log('📋 Ready for debugging! Open the main app and check console messages.');
+    </script>
+</body>
+</html>

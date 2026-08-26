@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Data Cleanup Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 10px 10px 10px 0;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #c0392b;
+        }
+        .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 4px; margin: 10px 0; }
+        .info { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 4px; margin: 10px 0; }
+        .warning { background: #fff3cd; color: #856404; padding: 15px; border-radius: 4px; margin: 10px 0; }
+        .code {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧹 Account Data Cleanup Tool</h1>
+    <p>This tool helps clean up corrupted localStorage account data that might be causing cross-user contamination.</p>
+
+    <div class="section">
+        <h3>📊 Current localStorage Account Data</h3>
+        <button onclick="showCurrentAccounts()">Show All Account Data</button>
+        <div id="currentAccountsResults"></div>
+    </div>
+
+    <div class="section">
+        <h3>🗑️ Cleanup Operations</h3>
+        <button onclick="clearAllAccountData()">Clear ALL Account Data</button>
+        <button onclick="clearTempAccounts()">Clear Temp Accounts Only</button>
+        <button onclick="clearRegistrationAccounts()">Clear Registration Accounts Only</button>
+        <div id="cleanupResults"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔍 Account Validation</h3>
+        <button onclick="validateAccountData()">Check for Cross-User Contamination</button>
+        <div id="validationResults"></div>
+    </div>
+
+    <script>
+        function showCurrentAccounts() {
+            const resultsDiv = document.getElementById('currentAccountsResults');
+            let html = '<div class="info">Current localStorage account data:</div>';
+            
+            const accountKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('account') || key.includes('temp_') || key.includes('registration_'))) {
+                    accountKeys.push(key);
+                }
+            }
+            
+            if (accountKeys.length === 0) {
+                html += '<div class="success">No account data found in localStorage</div>';
+            } else {
+                html += `<div class="warning">Found ${accountKeys.length} account entries:</div>`;
+                accountKeys.forEach(key => {
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        html += `<div class="code">
+<strong>Key:</strong> ${key}
+<strong>User ID:</strong> ${data.userId || 'MISSING!'}
+<strong>Email:</strong> ${data.email || data.userEmail || 'MISSING!'}
+<strong>Account Type:</strong> ${data.accountType || 'MISSING!'}
+<strong>Balance:</strong> $${data.balance || 0}
+<strong>Created:</strong> ${data.createdAt || 'MISSING!'}
+</div>`;
+                    } catch (error) {
+                        html += `<div class="code">
+<strong>Key:</strong> ${key}
+<strong>Error:</strong> Invalid JSON data
+</div>`;
+                    }
+                });
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+
+        function clearAllAccountData() {
+            const resultsDiv = document.getElementById('cleanupResults');
+            let count = 0;
+            
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('account') || key.includes('temp_') || key.includes('registration_'))) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                count++;
+            });
+            
+            resultsDiv.innerHTML = `<div class="success">✅ Cleared ${count} account entries from localStorage</div>`;
+        }
+
+        function clearTempAccounts() {
+            const resultsDiv = document.getElementById('cleanupResults');
+            let count = 0;
+            
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('temp_account_')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                count++;
+            });
+            
+            resultsDiv.innerHTML = `<div class="success">✅ Cleared ${count} temp account entries</div>`;
+        }
+
+        function clearRegistrationAccounts() {
+            const resultsDiv = document.getElementById('cleanupResults');
+            let count = 0;
+            
+            const keysToRemove = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('registration_account_')) {
+                    keysToRemove.push(key);
+                }
+            }
+            
+            keysToRemove.forEach(key => {
+                localStorage.removeItem(key);
+                count++;
+            });
+            
+            resultsDiv.innerHTML = `<div class="success">✅ Cleared ${count} registration account entries</div>`;
+        }
+
+        function validateAccountData() {
+            const resultsDiv = document.getElementById('validationResults');
+            let html = '';
+            
+            const accountKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('account') || key.includes('temp_') || key.includes('registration_'))) {
+                    accountKeys.push(key);
+                }
+            }
+            
+            if (accountKeys.length === 0) {
+                html = '<div class="success">✅ No account data to validate</div>';
+            } else {
+                html = '<div class="info">🔍 Validation Results:</div>';
+                
+                const userIds = new Set();
+                const duplicateUserIds = [];
+                
+                accountKeys.forEach(key => {
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        const userId = data.userId;
+                        
+                        if (!userId) {
+                            html += `<div class="warning">⚠️ Account with missing userId: ${key}</div>`;
+                        } else {
+                            if (userIds.has(userId)) {
+                                duplicateUserIds.push(userId);
+                            }
+                            userIds.add(userId);
+                        }
+                        
+                        // Extract userId from key and compare
+                        const keyUserId = key.includes('temp_account_') ? key.replace('temp_account_', '') : 
+                                         key.includes('registration_account_') ? key.replace('registration_account_', '') : null;
+                        
+                        if (keyUserId && keyUserId !== userId) {
+                            html += `<div class="warning">🚨 MISMATCH: Key suggests userId ${keyUserId} but data has userId ${userId}</div>`;
+                        }
+                        
+                    } catch (error) {
+                        html += `<div class="warning">⚠️ Invalid data in ${key}</div>`;
+                    }
+                });
+                
+                if (duplicateUserIds.length > 0) {
+                    html += `<div class="warning">🚨 Found duplicate accounts for users: ${[...new Set(duplicateUserIds)].join(', ')}</div>`;
+                } else {
+                    html += '<div class="success">✅ No duplicate user accounts found</div>';
+                }
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+
+        // Auto-show current accounts on load
+        document.addEventListener('DOMContentLoaded', function() {
+            showCurrentAccounts();
+        });
+    </script>
+</body>
+</html>

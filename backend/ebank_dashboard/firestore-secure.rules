@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection - secure access with username lookup capability
+    match /users/{userId} {
+      // Allow reading only username and email fields for authentication lookups
+      // This enables the login system to find users by username
+      allow read: if request.query.limit == 1 && 
+                     resource.data.keys().hasOnly(['username', 'email', 'role', 'uid']) ||
+                     // Allow authenticated users to read their own full data
+                     (request.auth != null && request.auth.uid == userId) ||
+                     // Allow admins to read all user data
+                     (request.auth != null && 
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      
+      // Allow authenticated users to update their own data (password changes, profile updates)
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow admins to create and delete user accounts
+      allow create, delete: if request.auth != null && 
+                            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Bank accounts - strict access control
+    match /accounts/{accountId} {
+      // Only account owners and admins can access account data
+      allow read, write: if request.auth != null && 
+                           (resource.data.userId == request.auth.uid ||
+                            (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      
+      // Allow admins to create accounts for users
+      allow create: if request.auth != null && 
+                       exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                       get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Transactions - account owner and admin access only
+    match /transactions/{transactionId} {
+      allow read, write: if request.auth != null && 
+                           (resource.data.userId == request.auth.uid ||
+                            (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+    
+    // System configuration - public read, admin write
+    match /systemConfig/{document} {
+      // Allow all users to read system config (for branding, logos, etc.)
+      allow read: if true;
+      
+      // Only admins can modify system configuration
+      allow write: if request.auth != null && 
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Countries data - public read for forms, admin write
+    match /countries/{country} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Support tickets and communications
+    match /support/{ticketId} {
+      // Users can read/write their own tickets, admins can access all
+      allow read, write: if request.auth != null && 
+                           (resource.data.userId == request.auth.uid ||
+                            (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      
+      // Allow creating support tickets
+      allow create: if request.auth != null;
+    }
+    
+    // Audit logs - admin only
+    match /audit_logs/{logId} {
+      allow read, write: if request.auth != null && 
+                           exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Default deny for any other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

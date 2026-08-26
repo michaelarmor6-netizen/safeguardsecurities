@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logo Converter</title>
+</head>
+<body>
+    <canvas id="canvas" width="200" height="60" style="border: 1px solid #ccc;"></canvas>
+    <br><br>
+    <button onclick="downloadLogo()">Download as PNG</button>
+    
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Create gradient
+        const gradient = ctx.createLinearGradient(0, 0, 200, 60);
+        gradient.addColorStop(0, '#3B82F6');
+        gradient.addColorStop(1, '#1E40AF');
+        
+        // Background with rounded corners (simulated)
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, 200, 60);
+        
+        // Bank building icon
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Building base
+        ctx.fillRect(15, 32, 32, 16);
+        
+        // Columns
+        ctx.fillStyle = 'white';
+        ctx.fillRect(17, 20, 3, 12);
+        ctx.fillRect(23, 20, 3, 12);
+        ctx.fillRect(29, 20, 3, 12);
+        ctx.fillRect(35, 20, 3, 12);
+        ctx.fillRect(41, 20, 3, 12);
+        
+        // Roof (triangle)
+        ctx.beginPath();
+        ctx.moveTo(31, 16);
+        ctx.lineTo(19, 20);
+        ctx.lineTo(43, 20);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Steps
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.fillRect(15, 48, 32, 2);
+        
+        // Company name
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px Arial, sans-serif';
+        ctx.fillText('Digital Banking', 60, 25);
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = '12px Arial, sans-serif';
+        ctx.fillText('Platform', 60, 42);
+        
+        window.downloadLogo = function() {
+            const link = document.createElement('a');
+            link.download = 'logo.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        };
+    </script>
+</body>
+</html>

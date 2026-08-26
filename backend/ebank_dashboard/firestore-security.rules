@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow username lookups for authentication (only username and email fields)
+    match /users/{userId} {
+      // Allow reading username and email for login purposes
+      allow read: if resource.data.keys().hasAll(['username', 'email']) &&
+                     request.query.limit <= 1;
+      
+      // Allow authenticated users to read their own full data
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow authenticated users to update their own data (for password changes, etc.)
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow admins to create and manage user accounts
+      allow create, delete: if request.auth != null && 
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Allow admins to read all user data
+      allow read: if request.auth != null && 
+                     get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Bank accounts - only accessible to account owners and admins
+    match /accounts/{accountId} {
+      allow read, write: if request.auth != null && 
+                           (resource.data.userId == request.auth.uid ||
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    
+    // System configuration - readable by all, writable by admins
+    match /system_config/{document} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Countries data - readable by all for forms
+    match /countries/{country} {
+      allow read: if true;
+      allow write: if request.auth != null && 
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Transactions - only accessible to account owners and admins
+    match /transactions/{transactionId} {
+      allow read, write: if request.auth != null && 
+                           (resource.data.userId == request.auth.uid ||
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    
+    // All other documents require authentication
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

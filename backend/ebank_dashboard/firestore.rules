@@ -1,0 +1,397 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow public read access to system configuration
+    match /systemConfig/{document} {
+      allow read: if true;
+    }
+    
+    // Allow public read access to countries collection
+    match /countries/{document} {
+      allow read: if true;
+    }
+    
+    // Users collection - restricted access for security
+    match /users/{userId} {
+      // Allow authenticated users to read their own data
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow admins to read/write all user data
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Allow creation of new users by admins
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Special rule for username lookups during login
+    // This allows reading ONLY email and role fields when filtering by username
+    match /users/{userId} {
+      allow read: if request.auth == null && 
+        resource.data.keys().hasOnly(['email', 'role', 'username', 'uid', 'isActive']) &&
+        request.query.where[0][0] == 'username';
+    }
+    
+    // Bank accounts collection
+    match /accounts/{accountId} {
+      // Users can read their own accounts
+      allow read: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+      
+      // Admins can read/write all accounts
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      
+      // Allow account creation by admins
+      allow create: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Transactions collection
+    match /transactions/{transactionId} {
+      // Users can read their own transactions
+      allow read: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+      
+      // Admins can read/write all transactions
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Support requests collection
+    match /supportRequests/{requestId} {
+      // Users can read/write their own support requests
+      allow read, write: if request.auth != null && 
+        resource.data.userId == request.auth.uid;
+      
+      // Admins can read/write all support requests
+      allow read, write: if request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // FAQ collection - public read access
+    match /faqs/{faqId} {
+      allow read: if true;
+
+      // Only admins can write FAQs
+      allow write: if request.auth != null &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // --- Safeguard investor platform (VITE_APP_MODE=safeguard) ---
+    // Separate role model from the bank users/{} collection above:
+    // profiles/{uid}.role is one of client|support|admin|finance|compliance|super_admin.
+    function isInvestorAdmin() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role != 'client';
+    }
+
+    // Investor profiles - self-provisioned on first login, admin-managed after
+    match /profiles/{uid} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == uid || isInvestorAdmin());
+
+      // Client creates its own profile document (ensureInvestorProfile)
+      allow create: if request.auth != null && request.auth.uid == uid;
+
+      // Self can update own profile but NOT role/accountStatus (privilege escalation guard);
+      // admins can update/activate any profile including those fields.
+      // `plan` is guarded alongside role/accountStatus: it gates paid AI Engine
+      // features, so a client able to write it could self-upgrade for free.
+      // get() with a default handles profiles created before plans existed.
+      allow update: if request.auth != null &&
+        (isInvestorAdmin() ||
+         (request.auth.uid == uid &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.accountStatus == resource.data.accountStatus &&
+          request.resource.data.get('plan', 'free') == resource.data.get('plan', 'free')));
+
+      allow delete: if isInvestorAdmin();
+    }
+
+    // Investor wallets - owner can read their own, only admins create/manage balances
+    match /wallets/{walletId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create, update, delete: if isInvestorAdmin();
+    }
+
+    // Investor portfolio holdings - owner can read their own, only admins manage
+    match /portfolioHoldings/{holdingId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow write: if isInvestorAdmin();
+    }
+
+    // Investor funding requests - owner can read/create their own, only admins approve/reject.
+    // Owners may additionally update ONLY paymentClaimedAt / paymentProofs (+updatedAt) - the
+    // "I've sent the payment" button - never status/amount/reference.
+    match /fundingRequests/{requestId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if isInvestorAdmin() ||
+        (request.auth != null && resource.data.userId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt']));
+      allow delete: if isInvestorAdmin();
+    }
+
+    // Funding reference counters (counters/funding-{YYYY}): any signed-in user
+    // may bump the sequence by exactly 1 while creating a funding request
+    // (see createFundingRequest's transaction). Only {value} exists on the doc
+    // and it must increment monotonically - nothing else is writable.
+    match /counters/{counterId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null &&
+        request.resource.data.keys().hasOnly(['value']) &&
+        request.resource.data.value == 1;
+      allow update: if request.auth != null &&
+        request.resource.data.keys().hasOnly(['value']) &&
+        request.resource.data.value == resource.data.value + 1;
+      allow delete: if false;
+    }
+
+    // Investor admin orders - owner can read/create their own (as pending), only admins execute/manage.
+    // Create additionally requires Trade Desk eligibility: profiles/{uid}.investorTier must be
+    // advanced or institutional (standard clients are desk-managed and cannot self-trade).
+    // Mirrors canSelfTrade() in src/services/investor/profileService.ts - change both.
+    // Staff order placement goes through the placeOrderOnBehalf Cloud Function (Admin SDK,
+    // bypasses rules), so this does not affect admins.
+    match /adminOrders/{orderId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid &&
+        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data
+          .get('investorTier', 'standard') in ['advanced', 'institutional'];
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    // Investor support tickets - owner can read/create their own, only admins respond/close
+    // Client-initiated plan upgrade requests. Clients may raise and read their
+    // own; only staff can action them. No billing exists yet (Phase 5), so a
+    // request is an expression of intent, never a plan change in itself.
+    // Referral code lookup: code -> owning account. Readable by any signed-in
+    // user because a person who just signed up needs to resolve someone else's
+    // code; it exposes only an opaque uid. Written once by the code's owner and
+    // immutable after that, so a code cannot be re-pointed at another account.
+    match /referralCodes/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    // Join records. Created by the person who was referred (they are the only
+    // one who can prove who they are at that moment); readable by either side.
+    // Status is staff-controlled - a client cannot mark their own referral
+    // funded and claim a reward.
+    match /referrals/{referralId} {
+      allow read: if request.auth != null &&
+        (resource.data.referrerUserId == request.auth.uid ||
+         resource.data.referredUserId == request.auth.uid ||
+         isInvestorAdmin());
+      allow create: if request.auth != null &&
+        request.resource.data.referredUserId == request.auth.uid &&
+        request.resource.data.status == 'signed_up';
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    match /planRequests/{requestId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    match /supportTickets/{ticketId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    // Admin audit log - admin-only, immutable (no update/delete - it's a log)
+    match /auditLogs/{logId} {
+      allow read, create: if isInvestorAdmin();
+    }
+
+    // CRM - lead intake, import batches, do-not-contact list. After wallets
+    // this is the most sensitive data in the app (PII for people who never
+    // signed up), so every collection is staff-only. Clients have no path
+    // here at all. Import batches are immutable once written (audit trail);
+    // suppression entries can be created and removed by staff, and phase 3
+    // adds function-only writers (unsubscribe endpoint, bounce webhook).
+    match /crmLeads/{leadId} {
+      allow read, write: if isInvestorAdmin();
+    }
+    match /crmImports/{batchId} {
+      allow read, create: if isInvestorAdmin();
+    }
+    match /crmSuppression/{entryId} {
+      allow read, create, delete: if isInvestorAdmin();
+    }
+    // Funnel campaigns and their per-lead enrollments. Staff manage both;
+    // the send worker and webhook run with the Admin SDK (rules-exempt).
+    // Email events are read-only evidence in the console.
+    match /crmCampaigns/{campaignId} {
+      allow read, write: if isInvestorAdmin();
+    }
+    match /crmEnrollments/{enrollmentId} {
+      allow read, write: if isInvestorAdmin();
+    }
+    match /crmEmailEvents/{eventId} {
+      allow read: if isInvestorAdmin();
+    }
+    // GI inbound staging + source registry. The webhook writes with the
+    // Admin SDK (rules-exempt); staff review, accept/decline, and can flip
+    // a source's kill switch. Inbound rows are never client-created.
+    match /crmInbound/{inboundId} {
+      allow read, update: if isInvestorAdmin();
+    }
+    match /crmSources/{sourceId} {
+      allow read, write: if isInvestorAdmin();
+    }
+
+    // KYC submissions - owner can create/read their own, only admins review (approve/reject)
+    match /kycSubmissions/{submissionId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isInvestorAdmin();
+    }
+
+    // Admin-defined model portfolio strategies - admin-only
+    match /strategies/{strategyId} {
+      allow read, write: if isInvestorAdmin();
+    }
+
+    // AI Engine signals - system-generated audit trail (written only by the
+    // generateTradingSignal Cloud Function via the Admin SDK). Owner and
+    // admins can read; no client writes.
+    match /aiSignals/{signalId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+    }
+
+    // AI Engine quota counters - one doc per user per month, id "{uid}_{YYYY-MM}".
+    // Owner (and staff) may read so the UI can render the allowance meter.
+    // No client write clause, deliberately: the counter is incremented only by
+    // the generateTradingSignal Cloud Function through the Admin SDK, which
+    // bypasses rules. A client able to write here could reset its own quota
+    // and mint unlimited signals.
+    // Matched on the doc id rather than resource.data so a first-time read of
+    // a not-yet-created counter resolves cleanly instead of denying.
+    match /aiUsage/{docId} {
+      allow read: if request.auth != null &&
+        (docId.split('_')[0] == request.auth.uid || isInvestorAdmin());
+    }
+
+    // Platform-wide settings (e.g. announcement banner) - readable by any
+    // signed-in investor user, only admins can change them
+    match /platformSettings/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isInvestorAdmin();
+    }
+
+    // Asset Management: taxonomy groups (Energies, Dow 30, ETFs, etc.) -
+    // readable by any signed-in user, only admins edit the taxonomy itself
+    match /assetGroups/{groupId} {
+      allow read: if request.auth != null;
+      allow write: if isInvestorAdmin();
+    }
+
+    // Asset Management: instrument master + embedded live quote. Catalog
+    // edits (isTradable, tick/lot size, etc.) are admin-only; the `quote`
+    // field is written server-side by refreshAssetQuotes/getAssetQuote via
+    // the Admin SDK, which bypasses these rules entirely - no separate
+    // write path needed for it.
+    match /assets/{symbol} {
+      allow read: if request.auth != null;
+      allow write: if isInvestorAdmin();
+    }
+
+    // Trade execution ledger - every fill, written only by the fillOrder
+    // Cloud Function via the Admin SDK (bypasses these rules). Owner and
+    // admins can read; no client writes, and corrections go through the
+    // updateTradeContract function, not direct writes.
+    match /trades/{tradeId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow write: if false;
+    }
+
+    // Cash movement audit trail - written only by fillOrder via the Admin
+    // SDK. Owner and admins can read; immutable from the client, same as
+    // auditLogs.
+    match /cashLedger/{entryId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow write: if false;
+    }
+
+    // Portfolio Structure "sleeves" - display/allocation grouping over a
+    // client's holdings. Admins manage any investor's sleeves; an investor
+    // may self-service create their own (matching the source platform's
+    // "one self-service sleeve" allowance), but only admins update/delete.
+    match /subPortfolios/{sleeveId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null &&
+        (isInvestorAdmin() || request.resource.data.userId == request.auth.uid);
+      allow update, delete: if isInvestorAdmin();
+    }
+    match /subPortfolioHoldings/{holdingId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow write: if isInvestorAdmin();
+    }
+
+    // Watchlist - fully self-service, one doc per investor. Admins can read
+    // for support purposes but never need to write a client's watchlist.
+    match /watchlists/{userId} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == userId || isInvestorAdmin());
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if isInvestorAdmin();
+    }
+
+    // Price alerts - self-service create/cancel; the `triggered`/`seen`
+    // transition is normally written by refreshAssetQuotes via the Admin
+    // SDK (bypasses these rules), but "seen" is also client-settable so a
+    // user can dismiss a triggered alert from the UI without an admin.
+    match /priceAlerts/{alertId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null &&
+        (isInvestorAdmin() ||
+         (resource.data.userId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'seen', 'updatedAt'])));
+      allow delete: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+    }
+
+    // Daily portfolio value snapshots - written only by the scheduled
+    // snapshotPortfolios Cloud Function via the Admin SDK. Owner and admins
+    // can read; this is the real data source behind the Dashboard/
+    // Performance history charts.
+    match /portfolioSnapshots/{snapshotId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow write: if false;
+    }
+
+    // Default deny all other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

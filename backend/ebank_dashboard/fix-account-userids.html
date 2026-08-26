@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Account User IDs</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .section { border: 1px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 8px; }
+        .success { border-color: #22c55e; background-color: #f0fdf4; }
+        .error { border-color: #ef4444; background-color: #fef2f2; }
+        .warning { border-color: #f59e0b; background-color: #fffbeb; }
+        button { padding: 10px 20px; margin: 5px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        button.danger { background: #ef4444; }
+        button.danger:hover { background: #dc2626; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Fix Account User ID Mapping</h1>
+    
+    <div class="warning section">
+        <h3>⚠️ Problem Identified</h3>
+        <p><strong>Issue:</strong> Accounts in Firestore are missing the <code>userId</code> field, causing admin to edit wrong accounts.</p>
+        <p><strong>Solution:</strong> Add proper <code>userId</code> fields to existing accounts based on <code>createdBy</code> field.</p>
+    </div>
+
+    <div class="section">
+        <h3>🔍 Step 1: Check Current Accounts</h3>
+        <button onclick="checkAccounts()">Load Current Accounts</button>
+        <div id="accountsResults"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔧 Step 2: Fix Account User IDs</h3>
+        <p>This will add the missing <code>userId</code> field to accounts based on their <code>createdBy</code> field:</p>
+        <button onclick="fixAccountUserIds()" class="danger">Fix Account User IDs</button>
+        <div id="fixResults"></div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getFirestore, collection, getDocs, doc, updateDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCbAQrQEyETkBw_1nMlDwEnkn4jqt1uPpo",
+            authDomain: "e-bank-dashboard.firebaseapp.com",
+            projectId: "e-bank-dashboard",
+            storageBucket: "e-bank-dashboard.firebasestorage.app",
+            messagingSenderId: "186587489295",
+            appId: "1:186587489295:web:c63b39b5216981bf89ef7a"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        window.currentUser = null;
+        window.accounts = [];
+
+        onAuthStateChanged(auth, (user) => {
+            window.currentUser = user;
+        });
+
+        window.checkAccounts = async function() {
+            const resultsDiv = document.getElementById('accountsResults');
+            resultsDiv.innerHTML = '<p>🔄 Loading accounts...</p>';
+
+            try {
+                const accountsSnapshot = await getDocs(collection(db, 'accounts'));
+                window.accounts = [];
+                
+                accountsSnapshot.forEach((doc) => {
+                    window.accounts.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                let resultsHtml = `
+                    <div class="success section">
+                        <h4>✅ Found ${window.accounts.length} Accounts</h4>
+                        <table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 11px;">
+                            <tr style="background: #f3f4f6;">
+                                <th style="border: 1px solid #ddd; padding: 8px;">Document ID</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">Account Holder</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">Created By</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">User ID</th>
+                                <th style="border: 1px solid #ddd; padding: 8px;">Status</th>
+                            </tr>
+                `;
+
+                window.accounts.forEach(account => {
+                    const hasUserId = account.userId ? '✅' : '❌ Missing';
+                    const createdBy = account.createdBy || 'N/A';
+                    
+                    resultsHtml += `
+                        <tr>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-family: monospace;">${account.id}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px;">${account.accountHolderName || 'N/A'}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px; font-family: monospace;">${createdBy}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px;">${hasUserId}</td>
+                            <td style="border: 1px solid #ddd; padding: 8px;">${account.isActive ? 'Active' : 'Inactive'}</td>
+                        </tr>
+                    `;
+                });
+
+                resultsHtml += `</table>
+                    <div style="margin: 15px 0; padding: 15px; background: #fffbeb; border-radius: 4px;">
+                        <h5 style="color: #92400e; margin: 0 0 10px 0;">🔧 Fix Plan:</h5>
+                        <p style="color: #92400e; margin: 0;">
+                            Accounts missing <code>userId</code> field will have it added based on their <code>createdBy</code> field.
+                            This will allow admin panel to correctly match accounts to users.
+                        </p>
+                    </div>
+                </div>`;
+
+                resultsDiv.innerHTML = resultsHtml;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error section">
+                        <h4>❌ Error Loading Accounts</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        window.fixAccountUserIds = async function() {
+            const resultsDiv = document.getElementById('fixResults');
+            
+            if (window.accounts.length === 0) {
+                resultsDiv.innerHTML = '<div class="error section">Please load accounts first</div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<p>🔄 Fixing account user IDs...</p>';
+
+            try {
+                let fixedCount = 0;
+                let skippedCount = 0;
+                let errors = [];
+
+                for (const account of window.accounts) {
+                    try {
+                        // Skip if already has userId
+                        if (account.userId) {
+                            skippedCount++;
+                            continue;
+                        }
+
+                        // Use createdBy as userId if available
+                        let userIdToAdd = null;
+                        
+                        if (account.createdBy) {
+                            userIdToAdd = account.createdBy;
+                        } else if (account.id.includes('_')) {
+                            // Extract userId from document ID pattern: userId_accountType
+                            userIdToAdd = account.id.split('_')[0];
+                        }
+
+                        if (userIdToAdd) {
+                            const accountRef = doc(db, 'accounts', account.id);
+                            await updateDoc(accountRef, {
+                                userId: userIdToAdd,
+                                updatedAt: new Date().toISOString(),
+                                fixedBy: 'account-fix-tool'
+                            });
+                            
+                            console.log(`✅ Fixed account ${account.id} - added userId: ${userIdToAdd}`);
+                            fixedCount++;
+                        } else {
+                            errors.push(`Account ${account.id}: No createdBy field or parseable ID`);
+                        }
+
+                    } catch (error) {
+                        errors.push(`Account ${account.id}: ${error.message}`);
+                    }
+                }
+
+                let resultsHtml = `
+                    <div class="${errors.length > 0 ? 'warning' : 'success'} section">
+                        <h4>🔧 Fix Results</h4>
+                        <div style="margin: 15px 0;">
+                            <strong>✅ Fixed:</strong> ${fixedCount} accounts<br>
+                            <strong>⏭️ Skipped:</strong> ${skippedCount} accounts (already had userId)<br>
+                            <strong>❌ Errors:</strong> ${errors.length} accounts
+                        </div>
+                `;
+
+                if (errors.length > 0) {
+                    resultsHtml += `
+                        <details>
+                            <summary>View Errors</summary>
+                            <pre>${errors.join('\n')}</pre>
+                        </details>
+                    `;
+                }
+
+                resultsHtml += `
+                        <div style="margin: 15px 0; padding: 15px; background: #f0fdf4; border-radius: 4px;">
+                            <h5 style="color: #166534; margin: 0 0 10px 0;">✅ Next Steps:</h5>
+                            <ol style="color: #166534; margin: 0;">
+                                <li>Refresh the admin panel</li>
+                                <li>Try editing an account again</li>
+                                <li>Check if changes now sync to client dashboard</li>
+                            </ol>
+                        </div>
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = resultsHtml;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error section">
+                        <h4>❌ Fix Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        // Auto-load accounts
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (window.currentUser) {
+                    window.checkAccounts();
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

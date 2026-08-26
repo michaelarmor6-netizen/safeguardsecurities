@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Delete Firebase Accounts</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: 0 auto; }
+        .section { border: 1px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 8px; }
+        .success { border-color: #22c55e; background-color: #f0fdf4; }
+        .error { border-color: #ef4444; background-color: #fef2f2; }
+        .warning { border-color: #f59e0b; background-color: #fffbeb; }
+        .danger { border-color: #dc2626; background-color: #fef2f2; }
+        button { padding: 10px 20px; margin: 5px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2563eb; }
+        button.danger { background: #ef4444; }
+        button.danger:hover { background: #dc2626; }
+        button.warning { background: #f59e0b; }
+        button.warning:hover { background: #d97706; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; font-size: 12px; }
+        .account-card { 
+            border: 1px solid #e5e7eb; 
+            margin: 10px 0; 
+            padding: 15px; 
+            border-radius: 6px; 
+            background: #f9fafb;
+        }
+        .account-card.problem { border-color: #fbbf24; background: #fefce8; }
+        .account-card h4 { margin: 0 0 10px 0; color: #1f2937; }
+        .account-info { font-size: 12px; line-height: 1.4; }
+        .delete-btn { background: #dc2626; color: white; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .delete-btn:hover { background: #b91c1c; }
+        .checkbox { margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <h1>🗑️ Firebase Account Cleanup Tool</h1>
+    
+    <div class="warning section">
+        <h3>⚠️ Important Warning</h3>
+        <p><strong>This tool permanently deletes accounts from Firestore.</strong></p>
+        <p>Only delete accounts that are causing sync issues. Make sure to identify the problematic account correctly.</p>
+    </div>
+
+    <div class="section">
+        <h3>🔍 Step 1: Load All Accounts</h3>
+        <p>First, let's see all accounts in your database:</p>
+        <button onclick="loadAllAccounts()">Load All Accounts</button>
+        <div id="accountsResults"></div>
+    </div>
+
+    <div class="section">
+        <h3>🗑️ Step 2: Select Accounts to Delete</h3>
+        <div id="deleteSection" style="display: none;">
+            <p class="warning" style="padding: 10px; background: #fef3c7; border-radius: 4px;">
+                <strong>⚠️ Danger Zone:</strong> Selected accounts will be permanently deleted from Firestore.
+            </p>
+            <button onclick="deleteSelectedAccounts()" class="danger">Delete Selected Accounts</button>
+            <div id="deleteResults"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
+        import { getFirestore, collection, getDocs, doc, deleteDoc } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
+        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
+
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyCbAQrQEyETkBw_1nMlDwEnkn4jqt1uPpo",
+            authDomain: "e-bank-dashboard.firebaseapp.com",
+            projectId: "e-bank-dashboard",
+            storageBucket: "e-bank-dashboard.firebasestorage.app",
+            messagingSenderId: "186587489295",
+            appId: "1:186587489295:web:c63b39b5216981bf89ef7a"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        window.currentUser = null;
+        window.accounts = [];
+        window.selectedAccounts = new Set();
+
+        onAuthStateChanged(auth, (user) => {
+            window.currentUser = user;
+        });
+
+        window.loadAllAccounts = async function() {
+            const resultsDiv = document.getElementById('accountsResults');
+            resultsDiv.innerHTML = '<p>🔄 Loading all accounts...</p>';
+
+            try {
+                const accountsSnapshot = await getDocs(collection(db, 'accounts'));
+                window.accounts = [];
+                
+                accountsSnapshot.forEach((doc) => {
+                    window.accounts.push({
+                        id: doc.id,
+                        ...doc.data()
+                    });
+                });
+
+                let resultsHtml = `
+                    <div class="success section">
+                        <h4>✅ Found ${window.accounts.length} Accounts</h4>
+                `;
+
+                if (window.accounts.length > 0) {
+                    // Group accounts by user
+                    const accountsByUser = {};
+                    const problemAccounts = [];
+
+                    window.accounts.forEach(account => {
+                        const userId = account.userId || account.createdBy || 'unknown';
+                        if (!accountsByUser[userId]) {
+                            accountsByUser[userId] = [];
+                        }
+                        accountsByUser[userId].push(account);
+                        
+                        // Identify problem accounts (no userId and suspicious patterns)
+                        if (!account.userId && !account.createdBy) {
+                            problemAccounts.push(account);
+                        }
+                    });
+
+                    resultsHtml += '<div style="margin: 20px 0;">';
+                    
+                    Object.keys(accountsByUser).forEach(userId => {
+                        const userAccounts = accountsByUser[userId];
+                        const isProblem = userAccounts.some(acc => !acc.userId && !acc.createdBy);
+                        
+                        resultsHtml += `
+                            <div class="account-card ${isProblem ? 'problem' : ''}">
+                                <h4>${isProblem ? '⚠️ ' : ''}User ID: ${userId}</h4>
+                                <div style="margin: 10px 0;">
+                                    ${userAccounts.map(account => `
+                                        <div style="border-left: 3px solid #e5e7eb; padding-left: 10px; margin: 8px 0;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                                <div class="account-info">
+                                                    <strong>Document ID:</strong> <code>${account.id}</code><br>
+                                                    <strong>Account Holder:</strong> ${account.accountHolderName || 'N/A'}<br>
+                                                    <strong>Email:</strong> ${account.userEmail || account.email || 'N/A'}<br>
+                                                    <strong>Balance:</strong> $${(account.balance || 0).toLocaleString()}<br>
+                                                    <strong>Type:</strong> ${account.accountType || 'N/A'}<br>
+                                                    <strong>Status:</strong> ${account.isActive ? 'Active' : 'Inactive'}<br>
+                                                    <strong>User ID Field:</strong> ${account.userId ? '✅ Present' : '❌ Missing'}<br>
+                                                    <strong>Created By:</strong> ${account.createdBy || 'N/A'}
+                                                </div>
+                                                <div style="margin-left: 15px;">
+                                                    <label style="display: flex; align-items: center; cursor: pointer;">
+                                                        <input type="checkbox" class="checkbox" 
+                                                               onchange="toggleAccountSelection('${account.id}')"
+                                                               ${isProblem ? 'checked' : ''}>
+                                                        <span style="color: #dc2626; font-weight: bold;">Delete</span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    });
+
+                    resultsHtml += '</div>';
+
+                    if (problemAccounts.length > 0) {
+                        resultsHtml += `
+                            <div class="warning" style="padding: 15px; margin: 15px 0; border-radius: 6px;">
+                                <h5 style="margin: 0 0 10px 0;">🔍 Analysis:</h5>
+                                <p style="margin: 0;"><strong>${problemAccounts.length} problem account(s)</strong> detected - missing userId field and causing sync issues.</p>
+                                <p style="margin: 5px 0 0 0;">These are pre-selected for deletion. Keep the accounts with proper userId fields.</p>
+                            </div>
+                        `;
+                    }
+
+                    document.getElementById('deleteSection').style.display = 'block';
+                } else {
+                    resultsHtml += '<p>No accounts found in the database.</p>';
+                }
+
+                resultsHtml += '</div>';
+                resultsDiv.innerHTML = resultsHtml;
+
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error section">
+                        <h4>❌ Error Loading Accounts</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        window.toggleAccountSelection = function(accountId) {
+            if (window.selectedAccounts.has(accountId)) {
+                window.selectedAccounts.delete(accountId);
+            } else {
+                window.selectedAccounts.add(accountId);
+            }
+            
+            console.log('Selected accounts:', Array.from(window.selectedAccounts));
+        };
+
+        window.deleteSelectedAccounts = async function() {
+            const selectedIds = Array.from(window.selectedAccounts);
+            
+            if (selectedIds.length === 0) {
+                alert('Please select at least one account to delete.');
+                return;
+            }
+
+            const confirmMessage = `⚠️ WARNING: You are about to permanently delete ${selectedIds.length} account(s):\n\n${selectedIds.join('\n')}\n\nThis action CANNOT be undone. Are you sure?`;
+            
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            const resultsDiv = document.getElementById('deleteResults');
+            resultsDiv.innerHTML = '<p>🔄 Deleting selected accounts...</p>';
+
+            try {
+                let deletedCount = 0;
+                let errors = [];
+
+                for (const accountId of selectedIds) {
+                    try {
+                        const accountRef = doc(db, 'accounts', accountId);
+                        await deleteDoc(accountRef);
+                        console.log(`✅ Deleted account: ${accountId}`);
+                        deletedCount++;
+                    } catch (error) {
+                        console.error(`❌ Error deleting ${accountId}:`, error);
+                        errors.push(`${accountId}: ${error.message}`);
+                    }
+                }
+
+                let resultsHtml = `
+                    <div class="${errors.length > 0 ? 'warning' : 'success'} section">
+                        <h4>🗑️ Deletion Results</h4>
+                        <div style="margin: 15px 0;">
+                            <strong>✅ Deleted:</strong> ${deletedCount} accounts<br>
+                            <strong>❌ Errors:</strong> ${errors.length} accounts
+                        </div>
+                `;
+
+                if (errors.length > 0) {
+                    resultsHtml += `
+                        <details>
+                            <summary>View Errors</summary>
+                            <pre>${errors.join('\n')}</pre>
+                        </details>
+                    `;
+                }
+
+                resultsHtml += `
+                        <div style="margin: 15px 0; padding: 15px; background: #f0fdf4; border-radius: 4px;">
+                            <h5 style="color: #166534; margin: 0 0 10px 0;">✅ Next Steps:</h5>
+                            <ol style="color: #166534; margin: 0;">
+                                <li>Refresh this page and reload accounts to verify deletion</li>
+                                <li>Test admin-to-client sync with remaining accounts</li>
+                                <li>The problematic accounts should no longer interfere</li>
+                            </ol>
+                        </div>
+                    </div>
+                `;
+
+                resultsDiv.innerHTML = resultsHtml;
+
+                // Clear selections and reload accounts
+                window.selectedAccounts.clear();
+                setTimeout(() => {
+                    window.loadAllAccounts();
+                }, 2000);
+
+            } catch (error) {
+                resultsDiv.innerHTML = `
+                    <div class="error section">
+                        <h4>❌ Deletion Failed</h4>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        };
+
+        // Auto-load accounts when ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (window.currentUser) {
+                    window.loadAllAccounts();
+                }
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

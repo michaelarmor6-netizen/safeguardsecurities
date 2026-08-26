@@ -1,0 +1,69 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production
+.env.production.local
+
+# Debug and test files
+*test*.html
+*debug*.html
+*.bat
+*.ps1
+
+# Local Netlify folder
+.netlify
+
+# One-off seed scripts with hardcoded local credentials - never commit
+scripts/seed-super-admin-admin-sdk.mjs
+scripts/seed-super-admin.mjs
+scripts/seed-super-admin-oauth.py
+
+# Generated demo output, not source
+scripts/email-preview-output.html
+
+# Build zip artifact
+dist.zip
+
+# session scratch (this agent cannot delete files on the mount - it moves them here)
+_to_delete/
+.claude/
+*.exe
+.env
+.env.*
+!.env.sample
+functions*/.env*
+functions*/lib
+*.tsbuildinfo
+.firebase/

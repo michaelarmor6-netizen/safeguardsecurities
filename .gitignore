@@ -19,3 +19,23 @@ mobile/android/local.properties
 backend/node_modules/
 scripts/node_modules/
 voice-worker/node_modules/
+# --- backend/ebank_dashboard (added 2026-08-25, first commit of the app) ---
+backend/ebank_dashboard/node_modules/
+backend/ebank_dashboard/*/node_modules/
+backend/ebank_dashboard/dist/
+backend/ebank_dashboard/.firebase/
+backend/ebank_dashboard/.env
+backend/ebank_dashboard/.env.*
+!backend/ebank_dashboard/.env.sample
+backend/ebank_dashboard/*.exe
+backend/ebank_dashboard/functions*/lib/
+backend/ebank_dashboard/functions*/.env*
+backend/ebank_dashboard/*.tsbuildinfo
+backend/ebank_dashboard/_to_delete/
+backend/ebank_dashboard/.claude/
+_to_delete/
+
+# Bulky archives - never push
+safeguardsecurities.us.rar
+*.rar
+.claude/

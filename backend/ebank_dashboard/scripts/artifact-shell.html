@@ -1,0 +1,203 @@
+<title>Onboarding Email Preview</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Montserrat:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --bg: #f8fafc;
+    --panel: #ffffff;
+    --border: #e2e8f0;
+    --border-strong: #cbd5e1;
+    --text: #1e293b;
+    --muted: #475569;
+    --muted-2: #64748b;
+    --indigo: #6366f1;
+    --indigo-deep: #4338ca;
+    --teal: #059669;
+    --gold: #d97706;
+    --font-display: 'Poppins', Arial, sans-serif;
+    --font-body: 'Montserrat', Arial, sans-serif;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0a0e27;
+      --panel: #0e1433;
+      --border: rgba(255,255,255,0.08);
+      --border-strong: rgba(255,255,255,0.16);
+      --text: #ffffff;
+      --muted: #94a3b8;
+      --muted-2: #7c88a6;
+      --indigo: #818cf8;
+      --indigo-deep: #6366f1;
+      --teal: #10b981;
+      --gold: #fbbf24;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0a0e27;
+    --panel: #0e1433;
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.16);
+    --text: #ffffff;
+    --muted: #94a3b8;
+    --muted-2: #7c88a6;
+    --indigo: #818cf8;
+    --indigo-deep: #6366f1;
+    --teal: #10b981;
+    --gold: #fbbf24;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    padding: 40px 20px 80px;
+  }
+
+  .wrap { max-width: 720px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: 26px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+
+  .lede {
+    color: var(--muted);
+    font-size: 14.5px;
+    line-height: 1.7;
+    max-width: 62ch;
+    margin: 0 0 32px;
+  }
+
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 26px;
+    margin-bottom: 24px;
+  }
+
+  .panel-label {
+    font-family: var(--font-display);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted-2);
+    margin: 0 0 16px;
+  }
+
+  .row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 0;
+    border-top: 1px solid var(--border);
+    font-size: 13.5px;
+  }
+  .row:first-of-type { border-top: none; padding-top: 0; }
+
+  .row .k { color: var(--muted-2); }
+  .row .v {
+    color: var(--text);
+    font-weight: 600;
+    text-align: right;
+    word-break: break-all;
+  }
+  .row .v.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+  .frame-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  .frame-panel .panel-label { display: flex; align-items: center; justify-content: space-between; }
+
+  .subject {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: -8px 0 16px;
+  }
+
+  #email-frame-host {
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .note {
+    font-size: 12.5px;
+    color: var(--muted-2);
+    margin: 14px 2px 0;
+    line-height: 1.6;
+  }
+
+  .badge {
+    display: inline-block;
+    font-family: var(--font-display);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--teal) 16%, transparent);
+    color: var(--teal);
+    border: 1px solid color-mix(in srgb, var(--teal) 30%, transparent);
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Admin &rarr; Create User &rarr; Step 7</p>
+  <h1>What the confirmation screen shows</h1>
+  <p class="lede">
+    This is a live render of <code>generateInvestorWelcomeEmailHtml()</code> &mdash; the exact function the app calls &mdash;
+    fed with realistic sample data for a client named <strong>Sarah Chen</strong>, created by admin
+    <strong>Jordan Lee</strong>. Every field below is what actually appears after an admin completes the
+    7-step wizard for a real client; only the name/email/password are placeholders for this demo.
+  </p>
+
+  <div class="panel">
+    <p class="panel-label">Account Created <span class="badge" style="float:right">Active</span></p>
+    <div class="row"><span class="k">Name</span><span class="v">Sarah Chen</span></div>
+    <div class="row"><span class="k">Email</span><span class="v">sarah.chen@example.com</span></div>
+    <div class="row"><span class="k">Temporary Password</span><span class="v mono">Kx7#mQ2p</span></div>
+    <div class="row"><span class="k">Account ID</span><span class="v mono">aB3dE9fGhJkLmN0pQrStUvWxYz12</span></div>
+    <div class="row"><span class="k">Login URL</span><span class="v">app.safeguardsecurities.us/login</span></div>
+  </div>
+
+  <div class="frame-panel">
+    <p class="panel-label">Welcome Email Preview</p>
+    <p class="subject">Welcome to SafeGuard Securities - Your Investor Workspace is Ready</p>
+    <div id="email-frame-host" style="min-height: 200px;"></div>
+    <p class="note">
+      This is rendered exactly like the real Step 7 screen (there it's an iframe; here it's an isolated shadow DOM node for this demo page). In the app, an admin would click
+      "Copy Formatted Email" here and paste it directly into a Gmail/Outlook compose window &mdash; the paste keeps
+      this formatting because it copies as rich HTML, not a mailto (which can only carry plain text).
+    </p>
+  </div>
+</div>
+
+<script id="email-frame-loader">
+__EMAIL_LOADER_SCRIPT__
+</script>

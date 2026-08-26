@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fix User mustChangePassword Flags</title>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+        import { 
+            getFirestore, 
+            collection, 
+            getDocs, 
+            doc, 
+            updateDoc, 
+            query, 
+            where 
+        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCHIIY9WZjWxBeLNJPWOGp2Mi8rJ8YM0js",
+            authDomain: "sgbank-3df4b.firebaseapp.com",
+            projectId: "sgbank-3df4b",
+            storageBucket: "sgbank-3df4b.appspot.com",
+            messagingSenderId: "1099438394340",
+            appId: "1:1099438394340:web:0b715b6dc7a394a0917893",
+            measurementId: "G-QV4XY298R0"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        async function checkUserFlags() {
+            const output = document.getElementById('output');
+            output.innerHTML = '<div class="loading">Checking user flags...</div>';
+            
+            try {
+                const usersRef = collection(db, 'users');
+                const snapshot = await getDocs(usersRef);
+                
+                const users = [];
+                snapshot.forEach((doc) => {
+                    const userData = doc.data();
+                    users.push({
+                        id: doc.id,
+                        ...userData
+                    });
+                });
+                
+                output.innerHTML = `
+                    <h3>User Flags Analysis</h3>
+                    <div class="stats">Total Users: ${users.length}</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>mustChangePassword</th>
+                                <th>Has Temporary Password</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${users.map(user => `
+                                <tr class="${user.mustChangePassword ? 'needs-fix' : ''}">
+                                    <td>${user.username || 'N/A'}</td>
+                                    <td>${user.email || 'N/A'}</td>
+                                    <td>
+                                        <span class="${user.mustChangePassword ? 'flag-true' : 'flag-false'}">
+                                            ${user.mustChangePassword ? 'TRUE' : 'FALSE'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="${user.temporaryPassword ? 'flag-true' : 'flag-false'}">
+                                            ${user.temporaryPassword ? 'YES' : 'NO'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        ${user.mustChangePassword && !user.temporaryPassword ? 
+                                            `<button onclick="fixUser('${user.id}', '${user.username}')" class="fix-btn">Fix User</button>` : 
+                                            '<span class="ok">OK</span>'
+                                        }
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                // Make fixUser function globally available
+                window.fixUser = async (userId, username) => {
+                    try {
+                        const userRef = doc(db, 'users', userId);
+                        await updateDoc(userRef, {
+                            mustChangePassword: false
+                        });
+                        
+                        alert(`Fixed user ${username}! mustChangePassword flag set to false.`);
+                        checkUserFlags(); // Refresh the table
+                    } catch (error) {
+                        console.error('Error fixing user:', error);
+                        alert(`Error fixing user ${username}: ${error.message}`);
+                    }
+                };
+                
+            } catch (error) {
+                console.error('Error checking user flags:', error);
+                output.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            }
+        }
+
+        async function fixAllUsers() {
+            if (!confirm('This will set mustChangePassword to FALSE for all users who do not have temporary passwords. Are you sure?')) {
+                return;
+            }
+            
+            const output = document.getElementById('output');
+            output.innerHTML = '<div class="loading">Fixing all users...</div>';
+            
+            try {
+                const usersRef = collection(db, 'users');
+                
+                // Get users where mustChangePassword is true but no temporary password
+                const snapshot = await getDocs(usersRef);
+                let fixCount = 0;
+                
+                for (const docSnapshot of snapshot.docs) {
+                    const userData = docSnapshot.data();
+                    
+                    // Fix users who have mustChangePassword=true but no temporary password
+                    if (userData.mustChangePassword && !userData.temporaryPassword) {
+                        const userRef = doc(db, 'users', docSnapshot.id);
+                        await updateDoc(userRef, {
+                            mustChangePassword: false
+                        });
+                        fixCount++;
+                        console.log(`Fixed user: ${userData.username || userData.email}`);
+                    }
+                }
+                
+                alert(`Fixed ${fixCount} users!`);
+                checkUserFlags(); // Refresh the table
+                
+            } catch (error) {
+                console.error('Error fixing all users:', error);
+                alert(`Error fixing users: ${error.message}`);
+            }
+        }
+
+        // Make functions globally available
+        window.checkUserFlags = checkUserFlags;
+        window.fixAllUsers = fixAllUsers;
+        
+        // Auto-run on page load
+        document.addEventListener('DOMContentLoaded', checkUserFlags);
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 0 10px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        .fix-btn {
+            background: #dc3545;
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        .fix-btn:hover {
+            background: #c82333;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .needs-fix {
+            background-color: #fff3cd;
+        }
+        
+        .flag-true {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .flag-false {
+            color: #28a745;
+        }
+        
+        .ok {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .loading {
+            text-align: center;
+            color: #007bff;
+            font-size: 18px;
+            padding: 20px;
+        }
+        
+        .error {
+            text-align: center;
+            color: #dc3545;
+            font-size: 16px;
+            padding: 20px;
+            background: #f8d7da;
+            border-radius: 4px;
+        }
+        
+        .stats {
+            background: #e7f3ff;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        
+        h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Fix User mustChangePassword Flags</h1>
+        
+        <div class="controls">
+            <button onclick="checkUserFlags()">🔍 Check User Flags</button>
+            <button onclick="fixAllUsers()" style="background: #dc3545;">🔧 Fix All Users</button>
+        </div>
+        
+        <div id="output">
+            <div class="loading">Loading user data...</div>
+        </div>
+        
+        <div style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 4px;">
+            <h4>How this works:</h4>
+            <ul>
+                <li><strong>Yellow rows</strong> indicate users with mustChangePassword=TRUE</li>
+                <li><strong>Problem:</strong> Users with mustChangePassword=TRUE but no temporary password get stuck in password change loop</li>
+                <li><strong>Solution:</strong> Click "Fix User" to set mustChangePassword=FALSE for individual users</li>
+                <li><strong>Bulk Fix:</strong> Click "Fix All Users" to automatically fix all problematic accounts</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

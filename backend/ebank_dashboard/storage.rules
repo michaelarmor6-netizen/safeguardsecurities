@@ -1,0 +1,79 @@
+rules_version = '2';
+
+// Firebase Storage Security Rules for Banking Dashboard
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAdmin() {
+      return firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'super-admin'];
+    }
+
+    // Safeguard investor platform uses a separate profiles/{uid}.role model
+    function isInvestorAdmin() {
+      return firestore.exists(/databases/(default)/documents/profiles/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/profiles/$(request.auth.uid)).data.role != 'client';
+    }
+
+    // Allow authenticated users to upload branding assets
+    match /branding/{allPaths=**} {
+      allow read: if true; // Public read for branding assets
+      allow write: if request.auth != null
+        && isAdmin()
+        && request.resource.size < 5 * 1024 * 1024 // 5MB limit
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Allow authenticated users to manage their profile images
+    match /profiles/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+        && (request.auth.uid == userId || isAdmin())
+        && request.resource.size < 2 * 1024 * 1024; // 2MB limit for profile images
+    }
+
+    // Allow admins to manage document uploads
+    match /documents/{allPaths=**} {
+      allow read, write: if request.auth != null
+        && isAdmin()
+        && request.resource.size < 10 * 1024 * 1024; // 10MB limit for documents
+    }
+
+    // KYC documents - owner can upload their own, only investor admins can read (for review)
+    match /kyc/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isInvestorAdmin());
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024 // 10MB limit
+        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+    }
+
+    // CRM import originals - the audit-trail archive of every lead file an
+    // admin loaded. Staff-only, and capped: a lead sheet has no business
+    // being 25MB+.
+    match /crm-imports/{batchId}/{allPaths=**} {
+      allow read: if request.auth != null && isInvestorAdmin();
+      allow write: if request.auth != null
+        && isInvestorAdmin()
+        && request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // Proof-of-payment receipts for funding requests - the client uploads
+    // their own (bank transfer screenshot, wire receipt, etc.) after tapping
+    // "I've sent the payment"; staff read them to verify against the bank.
+    match /payment-proofs/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && (request.auth.uid == userId || isInvestorAdmin());
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 15 * 1024 * 1024 // 15MB limit
+        && (request.resource.contentType.matches('image/.*')
+            || request.resource.contentType == 'application/pdf'
+            || request.resource.contentType == 'application/msword'
+            || request.resource.contentType == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    }
+
+    // Deny all other access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

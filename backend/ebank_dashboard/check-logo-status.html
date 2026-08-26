@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Logo Status Checker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .test-section { border: 2px solid #ddd; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .success { border-color: #22c55e; background-color: #f0fdf4; }
+        .error { border-color: #ef4444; background-color: #fef2f2; }
+        .warning { border-color: #f59e0b; background-color: #fffbeb; }
+        .logo-preview { display: flex; gap: 20px; align-items: center; margin: 15px 0; }
+        .logo-container { border: 1px solid #ccc; padding: 10px; }
+        .admin-size { width: 64px; height: 64px; background: #dc2626; display: flex; align-items: center; justify-content: center; }
+        .client-size { width: 64px; height: 64px; background: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; border: 1px solid #ddd; }
+        input[type="text"] { width: 100%; padding: 10px; margin: 10px 0; }
+        button { padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #2563eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Logo Status Checker</h1>
+        
+        <div class="test-section">
+            <h3>Step 1: Get Your Firebase Storage URL</h3>
+            <p>Go to <strong>System Settings → Branding tab</strong> and look for "Current Logo" section.</p>
+            <p>If you see your logo there, right-click and select "Copy image address" or "Copy link address"</p>
+            <input type="text" id="logoUrl" placeholder="Paste your Firebase Storage URL here (starts with https://firebasestorage.googleapis.com/...)">
+            <button onclick="checkLogo()">Check Logo Status</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function checkLogo() {
+            const url = document.getElementById('logoUrl').value.trim();
+            const resultsDiv = document.getElementById('results');
+            
+            if (!url) {
+                resultsDiv.innerHTML = '<div class="test-section error"><h4>❌ Please enter a URL</h4></div>';
+                return;
+            }
+
+            resultsDiv.innerHTML = '<div class="test-section warning"><h4>🔄 Testing logo...</h4></div>';
+
+            const img = new Image();
+            
+            img.onload = function() {
+                const isCorrectSize = this.naturalWidth === 64 && this.naturalHeight === 64;
+                const sizeStatus = isCorrectSize ? 
+                    '<span style="color: green;">✅ Perfect size!</span>' : 
+                    '<span style="color: orange;">⚠️ Different size</span>';
+
+                resultsDiv.innerHTML = `
+                    <div class="test-section success">
+                        <h4>✅ Logo loaded successfully!</h4>
+                        <p><strong>Actual Size:</strong> ${this.naturalWidth} × ${this.naturalHeight} pixels ${sizeStatus}</p>
+                        <p><strong>File URL:</strong> <a href="${url}" target="_blank">Open in new tab</a></p>
+                        
+                        <h4>Preview in Dashboard Sizes:</h4>
+                        <div class="logo-preview">
+                            <div class="logo-container">
+                                <div class="admin-size">
+                                    <img src="${url}" style="max-width: 60px; max-height: 60px; filter: brightness(0) invert(1);" alt="Admin view">
+                                </div>
+                                <small>Admin Sidebar (white filtered)</small>
+                            </div>
+                            
+                            <div class="logo-container">
+                                <div class="client-size">
+                                    <img src="${url}" style="max-width: 56px; max-height: 56px;" alt="Client view">
+                                </div>
+                                <small>Client Sidebar (original colors)</small>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px; padding: 15px; background: #f0fdf4; border-radius: 6px;">
+                            <h4 style="color: #166534; margin-top: 0;">🎉 Your logo is working!</h4>
+                            <p style="color: #166534;">If you don't see it in your dashboard yet, try:</p>
+                            <ul style="color: #166534;">
+                                <li>Hard refresh (Ctrl+Shift+R or Cmd+Shift+R)</li>
+                                <li>Clear browser cache</li>
+                                <li>Wait 1-2 minutes for Firebase to sync</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            };
+            
+            img.onerror = function() {
+                resultsDiv.innerHTML = `
+                    <div class="test-section error">
+                        <h4>❌ Logo failed to load</h4>
+                        <p><strong>URL tested:</strong> ${url}</p>
+                        <p><strong>Possible issues:</strong></p>
+                        <ul>
+                            <li>🔒 CORS policy blocking access (most common)</li>
+                            <li>🚫 Firebase Storage permissions issue</li>
+                            <li>🔗 Invalid URL or file not found</li>
+                            <li>📁 File format not supported by browser</li>
+                        </ul>
+                        <div style="margin-top: 15px; padding: 15px; background: #fffbeb; border-radius: 6px;">
+                            <h5 style="color: #92400e; margin-top: 0;">💡 What to do:</h5>
+                            <ol style="color: #92400e;">
+                                <li>Check if logo appears in System Settings → Branding tab</li>
+                                <li>If it appears there but this test fails, it's a CORS issue</li>
+                                <li>Try uploading a different logo file</li>
+                                <li>The dashboard might still work even if this test fails</li>
+                            </ol>
+                        </div>
+                    </div>
+                `;
+            };
+            
+            img.src = url;
+        }
+    </script>
+</body>
+</html>

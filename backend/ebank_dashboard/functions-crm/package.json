@@ -1,0 +1,23 @@
+{
+  "name": "functions-crm",
+  "description": "Cloud Functions for the CRM funnel - campaign send worker, unsubscribe endpoint, Resend webhook. Its own codebase so campaign sending never shares a deploy unit with trading or funding.",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "deploy": "firebase deploy --only functions:crm",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^5.1.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/express": "^4.17.21"
+  }
+}
