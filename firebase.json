@@ -239,43 +239,10 @@
         }
       ],
       "redirects": [
-        {"source": "/login", "destination": "/signin", "type": 301}
-      ]
-    },
-    {
-      "target": "app",
-      "public": "backend/ebank_app/dist",
-      "ignore": [
-        "firebase.json",
-        "**/.*",
-        "**/node_modules/**"
-      ],
-      "cleanUrls": true,
-      "trailingSlash": false,
-      "rewrites": [
         {
-          "source": "**",
-          "destination": "/index.html"
-        }
-      ],
-      "headers": [
-        {
-          "source": "/index.html",
-          "headers": [
-            {
-              "key": "Cache-Control",
-              "value": "no-cache, no-store, must-revalidate"
-            }
-          ]
-        },
-        {
-          "source": "/assets/**",
-          "headers": [
-            {
-              "key": "Cache-Control",
-              "value": "public, max-age=31536000, immutable"
-            }
-          ]
+          "source": "/login",
+          "destination": "/signin",
+          "type": 301
         }
       ]
     }
