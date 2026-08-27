@@ -62,13 +62,29 @@ export default function InvestorAdminFundingPage() {
             💰 Client says paid {f.paymentClaimedAt.toLocaleString()} — check the bank
           </p>
         )}
-        {/* Request details only on this page. The proof FILES live on the
-            Transactions page once settled; here finance just sees that
-            evidence was attached before confirming against the bank. */}
+        {/* Finance must be able to OPEN the proof before confirming receipt -
+            that is the whole point of proof of payment. Links render here
+            while the request is open; after confirming, the same files also
+            appear on the Transactions row for the audit trail. */}
         {f.status === 'approved' && f.awaitingPayment === true && (f.paymentProofs?.length ?? 0) > 0 && (
-          <p className="text-xs mt-0.5" style={{ color: 'var(--sg-gold)' }}>
-            📎 {f.paymentProofs!.length} proof file{f.paymentProofs!.length > 1 ? 's' : ''} attached — view in Transactions after confirming
-          </p>
+          <div className="text-xs mt-0.5" style={{ color: 'var(--sg-gold)' }}>
+            📎 {f.paymentProofs!.length} proof file{f.paymentProofs!.length > 1 ? 's' : ''} attached:
+            <span className="inline-flex flex-wrap gap-x-2 ml-1">
+              {f.paymentProofs!.map((p, i) => (
+                <a
+                  key={p.path || i}
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline"
+                  style={{ color: 'var(--sg-gold)' }}
+                  title={`${p.name}${p.size ? ` (${Math.max(1, Math.round(p.size / 1024))} KB)` : ''}`}
+                >
+                  {p.name || `file ${i + 1}`}
+                </a>
+              ))}
+            </span>
+          </div>
         )}
         {f.status === 'approved' && f.awaitingPayment === true && (
           <p className="text-xs mt-0.5" style={{ color: 'var(--sg-muted-2)' }}>
