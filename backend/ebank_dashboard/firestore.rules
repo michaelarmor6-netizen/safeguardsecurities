@@ -149,6 +149,16 @@ service cloud.firestore {
     // may bump the sequence by exactly 1 while creating a funding request
     // (see createFundingRequest's transaction). Only {value} exists on the doc
     // and it must increment monotonically - nothing else is writable.
+    // Daily underlying settlement marks (marketPrices/{TICKER}) - written by
+    // Cloud Functions with the Admin SDK (bypasses rules) or by the desk via
+    // the admin callable. Clients READ them so the dashboard values option
+    // positions with the same mark the nightly snapshot uses. This is public
+    // market data (a COMEX settlement price); nothing client-specific here.
+    match /marketPrices/{ticker} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /counters/{counterId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null &&

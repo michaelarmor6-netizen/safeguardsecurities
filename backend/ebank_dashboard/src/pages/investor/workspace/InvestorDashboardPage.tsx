@@ -139,7 +139,13 @@ export default function InvestorDashboardPage() {
     holdingsCount: 0,
   };
 
-  const SHOW_TOTAL_GAIN = false; // see the comment at the stat-card grid below
+  // A payoff position with no daily settlement yet marks at cost, which
+  // makes gain/performance a mathematically-true-but-misleading 0. Show an
+  // explicit "awaiting mark" state instead of a number in that case; once
+  // marketPrices carries the settlement (auto via Massive, or posted by the
+  // desk in Admin > Assets), the real figures render with their as-of date.
+  const awaitingMark = holdings.length > 0 && holdings.every((h) => h.markedAtCost);
+  const markAsOf = holdings.find((h) => h.markAsOf)?.markAsOf;
 
   const statColors = ['var(--sg-indigo)', 'var(--sg-teal)', 'var(--sg-pink)', 'var(--sg-gold)'] as const;
 
@@ -191,23 +197,21 @@ export default function InvestorDashboardPage() {
         </div>
       </div>
 
-      {/* Total Gain is HIDDEN while the underlying-settlement feed is being
-          set up. The math is already correct - gain = (settlement - entry
-          underlying) x multiplier x contracts, floored at -premium (see
-          optionValuation.ts) - but with no daily settlement in marketPrices
-          the position marks at cost, so gain shows $0.00, which a client
-          reads as "no growth" rather than "not yet marked". Flip this flag
-          once refreshUnderlyingPricesDaily is live (Massive key + the
-          asset's underlyingPriceSymbol set) and positions carry
-          entryUnderlyingPrice + multiplier. */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${SHOW_TOTAL_GAIN ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         {[
           { label: 'Total Value', value: fmt(s.totalValue), sub: pct(s.dayChangePercent), up: s.dayChangePercent >= 0 },
-          ...(SHOW_TOTAL_GAIN
-            ? [{ label: 'Total Gain', value: fmt(s.totalGain), sub: pct(s.totalGainPercent), up: s.totalGain >= 0 }]
-            : []),
+          awaitingMark
+            ? { label: 'Total Gain', value: '—', sub: 'Awaiting daily settlement mark', up: true }
+            : {
+                label: 'Total Gain',
+                value: fmt(s.totalGain),
+                sub: markAsOf ? `${pct(s.totalGainPercent)} · as of ${markAsOf}` : pct(s.totalGainPercent),
+                up: s.totalGain >= 0,
+              },
           { label: 'Holdings', value: String(s.holdingsCount), sub: 'Active positions', up: true },
-          { label: 'Performance', value: pct(s.totalGainPercent), sub: 'Based on active holdings', up: s.totalGainPercent >= 0 },
+          awaitingMark
+            ? { label: 'Performance', value: '—', sub: 'Awaiting daily settlement mark', up: true }
+            : { label: 'Performance', value: pct(s.totalGainPercent), sub: 'Based on active holdings', up: s.totalGainPercent >= 0 },
         ].map(({ label, value, sub, up }, i) => (
           <div key={label} className="sg-card p-4" style={{ borderRadius: 14 }}>
             <p className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>

@@ -1,4 +1,4 @@
-import { collection, getDocs, query, where, type DocumentData } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, where, type DocumentData } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 import { getAllFundingRequests, getPendingFundingRequests } from './fundingService';
@@ -39,6 +39,8 @@ export interface PortfolioHolding {
   breakEven?: number;
   /** True when no live quote exists and price falls back to entry cost. */
   markedAtCost?: boolean;
+  /** Trading session (YYYY-MM-DD) of the settlement used to mark the payoff. */
+  markAsOf?: string;
 }
 
 export interface PortfolioStats {
@@ -94,6 +96,39 @@ export async function getAllHoldingsRaw(): Promise<RawHolding[]> {
   });
 }
 
+interface UnderlyingMark {
+  price: number;
+  asOf?: string;
+}
+
+// Same doc-id sanitisation functions-market uses when it writes marketPrices.
+const marketPriceDocId = (ticker: string) => ticker.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
+
+/**
+ * Daily settlement marks for a set of underlying tickers, straight from
+ * marketPrices - the SAME source the nightly snapshotPortfolios job values
+ * against, so the dashboard and the recorded history can never disagree.
+ * A missing or malformed doc yields no mark (position falls back to cost).
+ */
+async function fetchUnderlyingMarks(tickers: string[]): Promise<Map<string, UnderlyingMark>> {
+  const marks = new Map<string, UnderlyingMark>();
+  const unique = [...new Set(tickers.map((x) => x.trim().toUpperCase()).filter(Boolean))];
+  await Promise.all(
+    unique.map(async (ticker) => {
+      try {
+        const snap = await getDoc(doc(db, 'marketPrices', marketPriceDocId(ticker)));
+        const price = Number(snap.data()?.price);
+        if (snap.exists() && Number.isFinite(price) && price > 0) {
+          marks.set(ticker, { price, asOf: typeof snap.data()?.asOf === 'string' ? snap.data()?.asOf : undefined });
+        }
+      } catch {
+        // Unreadable mark = unmarked position, never a crash.
+      }
+    }),
+  );
+  return marks;
+}
+
 export async function getUserPortfolio(userId: string): Promise<PortfolioHolding[]> {
   const snap = await getDocs(
     query(collection(db, LIVE_COLLECTIONS.portfolioHoldings), where('userId', '==', userId)),
@@ -108,6 +143,13 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
   const catalog = await getAllAssets().catch(() => []);
   const byId = new Map(catalog.map((a) => [a.id, a]));
   const bySymbol = new Map(catalog.map((a) => [a.symbol, a]));
+
+  // One read per distinct underlying: the daily settlement each derivative
+  // position marks against (assets carry underlyingPriceSymbol, e.g. GCZ27).
+  const underlyingTickers = rows
+    .map((r) => ((r.assetId ? byId.get(r.assetId) : undefined) ?? bySymbol.get(r.symbol))?.underlyingPriceSymbol)
+    .filter((x): x is string => typeof x === 'string' && x.length > 0);
+  const marks = await fetchUnderlyingMarks(underlyingTickers);
 
   const enriched: PortfolioHolding[] = [];
 
@@ -137,6 +179,11 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
     // (positions opened before those fields existed) or when there is no live
     // underlying price. In that case we keep the mark-at-cost path rather than
     // inventing a valuation.
+    // The mark for the payoff is the underlying's daily settlement, NOT any
+    // quote on the contract symbol itself (which rarely exists). Falls back
+    // to livePrice for instruments that do quote directly.
+    const underlyingTicker = asset?.underlyingPriceSymbol?.trim().toUpperCase();
+    const mark = underlyingTicker ? marks.get(underlyingTicker) : undefined;
     const valuation = valueOptionPosition(
       {
         contracts: row.shares,
@@ -144,7 +191,7 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
         entryUnderlyingPrice: row.entryUnderlyingPrice ?? 0,
         multiplier: row.multiplier ?? 0,
       },
-      livePrice,
+      mark?.price ?? livePrice,
     );
 
     enriched.push({
@@ -157,6 +204,7 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
       value: valuation ? valuation.value : value,
       allocation: 0,
       markedAtCost: valuation ? false : markedAtCost,
+      markAsOf: valuation ? mark?.asOf : undefined,
       optionPnl: valuation?.pnl,
       maxLoss: valuation?.maxLoss,
       isCapped: valuation?.isCapped,
