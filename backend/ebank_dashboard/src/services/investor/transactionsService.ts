@@ -39,7 +39,9 @@ function toTransaction(f: FundingRequest): Transaction {
     userId: f.userId,
     userEmail: f.userEmail,
     amount: f.amount,
-    completedAt: f.fundedAt,
+    // Legacy rows (credited at approval, before the two-step flow) have no
+    // fundedAt - their approval WAS the settlement.
+    completedAt: f.fundedAt ?? f.approvedAt,
     paymentClaimedAt: f.paymentClaimedAt,
     requestedAt: f.createdAt,
     approvedAt: f.approvedAt,
@@ -48,13 +50,16 @@ function toTransaction(f: FundingRequest): Transaction {
 }
 
 /**
- * Every successful transaction, newest first. Only 'funded' rows qualify:
- * an approved-but-unpaid request is not a transaction, it is a promise.
+ * Every successful transaction, newest first. Two shapes qualify:
+ *  - 'funded' rows (the two-step flow: confirmed received, wallet credited)
+ *  - legacy 'approved' rows with awaitingPayment unset (credited AT approval,
+ *    before 2026-08-24) - settled money, just under the old lifecycle.
+ * An approved row still awaiting payment is not a transaction, it's a promise.
  */
 export async function listTransactions(): Promise<Transaction[]> {
   const requests = await getAllFundingRequests();
   return requests
-    .filter((f) => f.status === 'funded')
+    .filter((f) => f.status === 'funded' || (f.status === 'approved' && f.awaitingPayment !== true))
     .map(toTransaction)
     .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
 }

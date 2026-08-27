@@ -25,11 +25,15 @@ export default function InvestorAdminFundingPage() {
   const { user, profile: adminProfile } = useInvestorAuth();
   const [rows, setRows] = useState<FundingRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  // Funded requests are settled money: they live on the Transactions page,
-  // with their proof of payment. This queue is only work still to be done.
+  // This queue is ONLY open work: pending review, awaiting payment, rejected.
+  // Settled money - 'funded' rows AND legacy approved-and-credited rows (the
+  // pre-2026-08-24 one-step flow, awaitingPayment unset) - lives on the
+  // Transactions page with its proof of payment.
+  const isSettled = (f: FundingRequest) =>
+    f.status === 'funded' || (f.status === 'approved' && f.awaitingPayment !== true);
   const load = () =>
     getAllFundingRequests()
-      .then((all) => setRows(all.filter((f) => f.status !== 'funded')))
+      .then((all) => setRows(all.filter((f) => !isSettled(f))))
       .catch((e) => toast.error(e.message));
   useEffect(() => { load(); }, []);
   // "Email manually" opens /funding-email/{id}: rendered HTML template with
@@ -49,9 +53,7 @@ export default function InvestorAdminFundingPage() {
   };
 
   const statusCell = (f: FundingRequest) => {
-    const label = f.status === 'approved' && f.awaitingPayment !== true
-      ? 'Approved (credited)'
-      : STATUS_LABEL[f.status] ?? f.status;
+    const label = STATUS_LABEL[f.status] ?? f.status;
     return (
       <div>
         <span>{label}</span>
@@ -60,25 +62,13 @@ export default function InvestorAdminFundingPage() {
             💰 Client says paid {f.paymentClaimedAt.toLocaleString()} — check the bank
           </p>
         )}
-        {/* Proof stays visible while a request awaits payment - finance cannot
-            verify a transfer without it. The permanent record (all files, all
-            history) lives on the Transactions page once confirmed. */}
+        {/* Request details only on this page. The proof FILES live on the
+            Transactions page once settled; here finance just sees that
+            evidence was attached before confirming against the bank. */}
         {f.status === 'approved' && f.awaitingPayment === true && (f.paymentProofs?.length ?? 0) > 0 && (
-          <div className="mt-1 space-y-0.5">
-            {f.paymentProofs!.map((p, i) => (
-              <a
-                key={i}
-                href={p.url}
-                target="_blank"
-                rel="noreferrer"
-                className="block text-xs underline w-fit"
-                style={{ color: 'var(--sg-gold)' }}
-                title={p.uploadedAt ? `Uploaded ${p.uploadedAt.toLocaleString()}` : undefined}
-              >
-                📎 {p.name}
-              </a>
-            ))}
-          </div>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--sg-gold)' }}>
+            📎 {f.paymentProofs!.length} proof file{f.paymentProofs!.length > 1 ? 's' : ''} attached — view in Transactions after confirming
+          </p>
         )}
         {f.status === 'approved' && f.awaitingPayment === true && (
           <p className="text-xs mt-0.5" style={{ color: 'var(--sg-muted-2)' }}>
