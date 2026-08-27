@@ -37,6 +37,7 @@ import InvestorAdminWalletSetupPage from './pages/investor/admin/InvestorAdminWa
 import InvestorAdminWalletsPage from './pages/investor/admin/InvestorAdminWalletsPage';
 import InvestorAdminFundingPage from './pages/investor/admin/InvestorAdminFundingPage';
 import InvestorAdminTransactionsPage from './pages/investor/admin/InvestorAdminTransactionsPage';
+import InvestorAdminEmailTemplatePage from './pages/investor/admin/InvestorAdminEmailTemplatePage';
 import InvestorAdminAssetsPage from './pages/investor/admin/InvestorAdminAssetsPage';
 import InvestorAdminSupportPage from './pages/investor/admin/InvestorAdminSupportPage';
 import InvestorAdminKycPage from './pages/investor/admin/InvestorAdminKycPage';
@@ -122,6 +123,7 @@ function SafeguardRoutes() {
         <Route path="wallets" element={<InvestorAdminWalletsPage />} />
         <Route path="funding" element={<InvestorAdminFundingPage />} />
         <Route path="transactions" element={<InvestorAdminTransactionsPage />} />
+        <Route path="email-templates" element={<InvestorAdminEmailTemplatePage />} />
         <Route path="assets" element={<InvestorAdminAssetsPage />} />
         <Route path="support" element={<InvestorAdminSupportPage />} />
         <Route path="kyc" element={<InvestorAdminKycPage />} />

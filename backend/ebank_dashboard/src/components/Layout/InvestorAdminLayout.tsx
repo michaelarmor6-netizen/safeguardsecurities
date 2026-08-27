@@ -20,6 +20,7 @@ import {
   Contact,
   FileUp,
   Send,
+  Mail,
 } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -42,6 +43,7 @@ const nav = [
   { to: '/admin/crm-leads', label: 'CRM Leads', icon: Contact },
   { to: '/admin/crm-imports', label: 'CRM Imports', icon: FileUp },
   { to: '/admin/crm-campaigns', label: 'CRM Campaigns', icon: Send },
+  { to: '/admin/email-templates', label: 'Email Builder', icon: Mail },
   { to: '/admin/audit', label: 'Audit Log', icon: ScrollText },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
