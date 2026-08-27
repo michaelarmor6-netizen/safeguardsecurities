@@ -25,7 +25,12 @@ export default function InvestorAdminFundingPage() {
   const { user, profile: adminProfile } = useInvestorAuth();
   const [rows, setRows] = useState<FundingRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const load = () => getAllFundingRequests().then(setRows).catch((e) => toast.error(e.message));
+  // Funded requests are settled money: they live on the Transactions page,
+  // with their proof of payment. This queue is only work still to be done.
+  const load = () =>
+    getAllFundingRequests()
+      .then((all) => setRows(all.filter((f) => f.status !== 'funded')))
+      .catch((e) => toast.error(e.message));
   useEffect(() => { load(); }, []);
   // "Email manually" opens /funding-email/{id}: rendered HTML template with
   // copy-for-Thunderbird, plain-text mailto fallback, and Mark emailed.
@@ -55,7 +60,10 @@ export default function InvestorAdminFundingPage() {
             💰 Client says paid {f.paymentClaimedAt.toLocaleString()} — check the bank
           </p>
         )}
-        {(f.paymentProofs?.length ?? 0) > 0 && (
+        {/* Proof stays visible while a request awaits payment - finance cannot
+            verify a transfer without it. The permanent record (all files, all
+            history) lives on the Transactions page once confirmed. */}
+        {f.status === 'approved' && f.awaitingPayment === true && (f.paymentProofs?.length ?? 0) > 0 && (
           <div className="mt-1 space-y-0.5">
             {f.paymentProofs!.map((p, i) => (
               <a
@@ -90,8 +98,8 @@ export default function InvestorAdminFundingPage() {
       <div>
         <h1 className="sg-page-title">Funding Requests</h1>
         <p className="sg-page-sub mt-1">
-          Approve to send deposit instructions; confirm receipt to credit the wallet.
-          Instructions content lives in Settings → Funding Details.
+          Approve to send deposit instructions; confirm receipt to credit the wallet. A confirmed
+          request moves to Transactions. Instructions content lives in Settings → Funding Details.
         </p>
       </div>
       <div className="sg-panel overflow-x-auto">
@@ -178,7 +186,7 @@ export default function InvestorAdminFundingPage() {
                       </button>
                     </>
                   )}
-                  {(f.status === 'funded' || (f.status === 'approved' && f.awaitingPayment === true)) && (
+                  {f.status === 'approved' && f.awaitingPayment === true && (
                     <button
                       type="button"
                       className="sg-action-btn"
@@ -192,7 +200,11 @@ export default function InvestorAdminFundingPage() {
             ))}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="p-8 text-center sg-text-muted">No funding requests.</p>}
+        {rows.length === 0 && (
+          <p className="p-8 text-center sg-text-muted">
+            No open funding requests. Completed ones are on the Transactions page.
+          </p>
+        )}
       </div>
     </div>
   );
