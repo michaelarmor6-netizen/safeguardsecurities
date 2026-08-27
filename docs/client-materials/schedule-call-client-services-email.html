@@ -1,328 +1,132 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scheduling Your Review Call - SafeGuard Securities</title>
-    <!--
-      SafeGuard Securities - Client Services scheduling email
-      Same UI family as the welcome email (safeguardwelcomeemailtemplate.html).
-      EDIT THE {{PLACEHOLDERS}} BEFORE SENDING (find & replace):
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduling Your Review Call - Safeguard Securities, Inc.</title>
+  <!--
+    Safeguard Securities - Client Services scheduling email
+    (same UI as companyintroduction_signup.html)
 
-        {{CLIENT_SALUTATION}}   e.g.  Mr McFarlane
-        {{EXECUTIVE_NAME}}      e.g.  Henry Cole
-        {{EXECUTIVE_TITLE}}     e.g.  Senior Account Executive
-        {{EXECUTIVE_EMAIL}}     e.g.  henry@safeguardsecurities.us
-        {{TOPIC_LINE}}          e.g.  your current positions and the market
-                                      opportunities we are tracking for you
-        {{OPTION_1}}            e.g.  Tuesday, 2 Sep - 10:00-12:00 (your local time)
-        {{OPTION_2}}            e.g.  Wednesday, 3 Sep - 15:00-17:00 (your local time)
-        {{SENDER_NAME}}         e.g.  Maria Santos
-        {{supportEmail}}        e.g.  info@safeguardsecurities.us
-        {{clientPortalUrl}}     e.g.  https://app.safeguardsecurities.us/client-login
-    -->
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background-color: #f5f5f5;
-            line-height: 1.6;
-            color: #333;
-        }
-        .email-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background-color: #ffffff;
-            overflow: hidden;
-        }
-        .header {
-            background-color: #ffffff;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 26px 30px;
-            text-align: left;
-            display: flex;
-            align-items: center;
-        }
-        .header-left {
-            display: flex;
-            align-items: center;
-        }
-        .logo-img {
-            height: 48px;
-            width: auto;
-            object-fit: contain;
-        }
-        .content {
-            padding: 40px 30px;
-        }
-        .greeting {
-            font-size: 18px;
-            font-weight: 600;
-            color: #003d82;
-            margin-bottom: 20px;
-        }
-        .intro-text {
-            color: #003d82;
-            margin-bottom: 30px;
-            font-size: 14px;
-            line-height: 1.8;
-        }
-        .account-info-section {
-            background-color: #f0f0f0;
-            border: 1px solid #ddd;
-            padding: 20px;
-            margin: 30px 0;
-            border-radius: 4px;
-        }
-        .section-title {
-            font-size: 14px;
-            font-weight: 700;
-            color: #003d82;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-        }
-        .section-title::before {
-            content: '';
-            display: inline-block;
-            width: 4px;
-            height: 4px;
-            background-color: #00cc00;
-            border-radius: 50%;
-            margin-right: 10px;
-        }
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #ddd;
-            font-size: 14px;
-            color: #003d82;
-        }
-        .info-row:last-child {
-            border-bottom: none;
-        }
-        .info-label {
-            font-weight: 600;
-            color: #003d82;
-        }
-        .info-value {
-            color: #003d82;
-            text-align: right;
-            word-break: break-word;
-        }
-        .highlight-box {
-            background-color: #e8f4f8;
-            border: 2px solid #003d82;
-            padding: 15px;
-            border-radius: 4px;
-            margin: 20px 0;
-            font-size: 13px;
-            color: #003d82;
-        }
-        .highlight-box strong {
-            color: #003d82;
-        }
-        .cta-section {
-            text-align: center;
-            margin: 30px 0;
-        }
-        .cta-button {
-            display: inline-block;
-            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-            color: white;
-            padding: 14px 40px;
-            text-decoration: none;
-            border-radius: 4px;
-            font-weight: 600;
-            font-size: 14px;
-            transition: transform 0.2s;
-        }
-        .cta-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-        }
-        .security-notice {
-            background-color: #ffe8e8;
-            border-left: 4px solid #e74c3c;
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-            font-size: 13px;
-            color: #003d82;
-        }
-        .security-notice strong {
-            color: #c0392b;
-        }
-        .footer {
-            background-color: #f0f0f0;
-            color: #003d82;
-            padding: 30px;
-            text-align: center;
-            font-size: 12px;
-            border-top: 1px solid #ddd;
-        }
-        .footer-section {
-            margin-bottom: 15px;
-        }
-        .footer-title {
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: #003d82;
-        }
-        .footer-link {
-            color: #003d82;
-            text-decoration: none;
-        }
-        .footer-link:hover {
-            text-decoration: underline;
-        }
-        .divider {
-            height: 1px;
-            background-color: #ddd;
-            margin: 15px 0;
-        }
-        .footer-note {
-            font-size: 10px;
-            color: #666;
-            margin-top: 15px;
-        }
-        a {
-            color: #003d82;
-        }
-    </style>
+    EDIT THE {{PLACEHOLDERS}} BEFORE SENDING (find & replace):
+      {{SALUTATION}} {{LAST_NAME}}   e.g.  Mr  McFarlane
+      {{EXECUTIVE_NAME}}             e.g.  Henry Cole
+      {{EXECUTIVE_TITLE}}            e.g.  Senior Account Executive
+      {{TOPIC_LINE}}                 e.g.  your current positions and the market
+                                           opportunities we are tracking for you
+      {{OPTION_1}}                   e.g.  Tuesday, 2 Sep - 10:00-12:00 (your local time)
+      {{OPTION_2}}                   e.g.  Wednesday, 3 Sep - 15:00-17:00 (your local time)
+      {{SENDER_NAME}}                e.g.  Maria Santos
+  -->
 </head>
-<body>
-    <div class="email-container">
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <img src="logo2.png" alt="SafeGuard Securities" class="logo-img" />
-            </div>
-        </div>
+<body style="margin:0; padding:0; background-color:#F5F7FA; font-family:Arial, Helvetica, sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F5F7FA" style="background-color:#F5F7FA;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:100%; background-color:#FFFFFF;">
 
-        <!-- Content -->
-        <div class="content">
-            <!-- Greeting -->
-            <div class="greeting">Good day {{CLIENT_SALUTATION}},</div>
+          <tr>
+            <td bgcolor="#000000" style="background-color:#000000; padding:16px 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="left" valign="middle">
+                    <a href="https://safeguardsecurities.us" style="text-decoration:none;">
+                      <img src="logo-header.png" width="160" style="display:block; width:160px; height:auto; border:0;">
+                    </a>
+                  </td>
+                  <td align="right" valign="middle" style="font-family:Arial, Helvetica, sans-serif; font-size:12px; color:#FFFFFF;">
+                    <a href="https://app.safeguardsecurities.us/client-login" style="display:inline-block; padding:6px 12px; border:1px solid #FFFFFF; border-radius:6px; color:#FFFFFF; text-decoration:none; font-size:12px;">Sign in</a><br>
+                    <span style="display:inline-block; margin-top:8px; color:#C9D6FF; font-size:11px;">Client Services</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-            <p class="intro-text">
-                {{EXECUTIVE_NAME}}, your {{EXECUTIVE_TITLE}}, is looking forward to speaking with you
-                about {{TOPIC_LINE}}. He has tried to reach you over the past few days without success,
-                so we would like to arrange a time that works around your schedule instead.
-            </p>
+          <tr>
+            <td style="padding:32px 28px 8px 28px;">
+              <h1 style="margin:0; font-family:Arial, Helvetica, sans-serif; font-size:24px; line-height:1.3; font-weight:bold; color:#0B1A46;">
+                Scheduling Your Review With {{EXECUTIVE_NAME}}
+              </h1>
+            </td>
+          </tr>
 
-            <!-- Internet access note -->
-            <div class="highlight-box">
-                <strong>&#128187; Online session</strong><br>
-                The conversation is held online, so please choose a time when you are free
-                <strong>with internet access</strong> &mdash; {{EXECUTIVE_NAME}} will walk through
-                your account with you on screen while you talk.
-            </div>
+          <tr>
+            <td style="padding:16px 28px 0 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2F5FA" style="background-color:#F2F5FA; border-radius:10px;">
+                <tr>
+                  <td style="padding:22px 24px; font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.6; color:#0B1A46;">
+                    <p style="margin:0 0 12px 0;">Dear {{SALUTATION}} {{LAST_NAME}},</p>
+                    <p style="margin:0 0 12px 0;"><strong>{{EXECUTIVE_NAME}}</strong>, your {{EXECUTIVE_TITLE}}, is looking forward to speaking with you about {{TOPIC_LINE}}. He has tried to reach you over the past few days without success, so we would like to arrange a time that works around your schedule instead.</p>
+                    <p style="margin:0;">The conversation is held online, so it would help to choose a time when you are free <strong>with internet access</strong> &mdash; {{EXECUTIVE_NAME}} can then walk through your account with you on screen while you talk.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-            <!-- Proposed times -->
-            <div class="account-info-section">
-                <div class="section-title">Times {{EXECUTIVE_NAME}} Currently Has Open</div>
-                <div class="info-row">
-                    <span class="info-label">Option 1:</span>
-                    <span class="info-value">{{OPTION_1}}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Option 2:</span>
-                    <span class="info-value">{{OPTION_2}}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Neither suits?</span>
-                    <span class="info-value">Reply with any day and time you prefer</span>
-                </div>
-            </div>
+          <tr>
+            <td style="padding:16px 28px 0 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2F5FA" style="background-color:#F2F5FA; border-radius:10px;">
+                <tr>
+                  <td style="padding:22px 24px; font-family:Arial, Helvetica, sans-serif; font-size:13px; line-height:1.65; color:#0B1A46;">
+                    <h2 style="margin:0 0 12px 0; font-size:16px; font-weight:bold; color:#0B1A46;">Times {{EXECUTIVE_NAME}} Currently Has Open</h2>
+                    <strong>Option 1:</strong> {{OPTION_1}}<br>
+                    <strong>Option 2:</strong> {{OPTION_2}}<br><br>
+                    Neither suits? Simply reply with any day and time you prefer and we will fit around it.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-            <!-- Call to Action -->
-            <div class="cta-section">
-                <a href="mailto:{{supportEmail}}?subject=Preferred%20time%20for%20my%20review%20call" class="cta-button">Suggest a Time</a>
-                <p style="margin-top: 12px; font-size: 13px;">
-                    <a href="{{clientPortalUrl}}" class="footer-link" style="text-decoration: underline;">Or sign in to your account</a>
-                </p>
-            </div>
+          <tr>
+            <td style="padding:16px 28px 0 28px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#F2F5FA" style="background-color:#F2F5FA; border-radius:10px;">
+                <tr>
+                  <td style="padding:22px 24px; font-family:Arial, Helvetica, sans-serif; color:#0B1A46;">
+                    <h2 style="margin:0 0 10px 0; font-size:16px; font-weight:bold; color:#0B1A46;">What You Need to Do:</h2>
+                    <p style="margin:0 0 12px 0; font-size:14px; line-height:1.6;">A short reply with your preferred time is all we need &mdash; we will confirm the appointment and send the connection details the same day.</p>
+                    <p style="margin:0 0 18px 0; font-size:13px; line-height:1.55; color:#8A4B12;"><strong>Security reminder:</strong> Safeguard Securities will never ask for your password or ask you to move funds while arranging an appointment. If in doubt, sign in to your account directly.</p>
+                    <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                      <tr>
+                        <td bgcolor="#3D66E1" style="background-color:#3D66E1; border-radius:8px;">
+                          <a href="mailto:info@safeguardsecurities.us?subject=Preferred%20time%20for%20my%20review%20call" style="display:inline-block; padding:12px 28px; font-family:Arial, Helvetica, sans-serif; font-size:14px; font-weight:bold; color:#FFFFFF; text-decoration:none;">Suggest a Time</a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-            <p class="intro-text" style="margin-bottom: 0;">
-                A short reply to this email with your preferred time is all we need &mdash; we will
-                confirm everything and send the connection details the same day.
-            </p>
+          <tr>
+            <td style="padding:24px 28px 32px 28px; font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.6; color:#0B1A46;">
+              <p style="margin:0 0 16px 0;">We look forward to hearing from you.</p>
+              <p style="margin:0 0 16px 0;">Sincerely,</p>
+              <p style="margin:0; font-weight:bold;">{{SENDER_NAME}}</p>
+              <p style="margin:2px 0 0 0; color:#3D66E1; font-size:13px;">Client Services, Safeguard Securities</p>
+              <p style="margin:10px 0 0 0; font-size:12px; color:#6B7280; line-height:1.55;">
+                6060 Parkland Boulevard, Suite 200, Mayfield Heights, OH 44124<br>
+                <a href="tel:+12162507891" style="color:#3D66E1; text-decoration:none;">+1 216 2507891</a>
+                &nbsp;|&nbsp;
+                <a href="https://safeguardsecurities.us" style="color:#3D66E1; text-decoration:none;">safeguardsecurities.us</a>
+              </p>
+            </td>
+          </tr>
 
-            <!-- Your Account Executive -->
-            <div class="account-info-section">
-                <div class="section-title">Your Account Executive</div>
-                <div class="info-row">
-                    <span class="info-label">Name:</span>
-                    <span class="info-value">{{EXECUTIVE_NAME}}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Title:</span>
-                    <span class="info-value">{{EXECUTIVE_TITLE}}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Email:</span>
-                    <span class="info-value">{{EXECUTIVE_EMAIL}}</span>
-                </div>
-            </div>
+          <tr>
+            <td bgcolor="#EEF1F6" style="background-color:#EEF1F6; padding:22px 28px; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.6; color:#6B7280; text-align:center;">
+              Safeguard Securities, Inc. &middot; Institutional Investment &amp; Brokerage<br>
+              This message relates to servicing your existing account and is not investment advice.<br>
+              <a href="https://safeguardsecurities.us" style="color:#3D66E1; text-decoration:none;">www.safeguardsecurities.us</a>
+            </td>
+          </tr>
 
-            <!-- Security notice -->
-            <div class="security-notice">
-                <strong>Security Reminder:</strong><br>
-                &bull; SafeGuard Securities will never ask for your password during a scheduling call<br>
-                &bull; We will never ask you to move funds as part of arranging an appointment<br>
-                &bull; If in doubt, sign in to your account directly or contact us through our website
-            </div>
-
-            <!-- Sign-off -->
-            <p style="margin-top: 30px; font-size: 14px; color: #003d82;">
-                We look forward to hearing from you.<br><br>
-                Kind regards,<br>
-                <strong>{{SENDER_NAME}}</strong><br>
-                <span style="font-size: 13px; color: #555;">Client Services &middot; SafeGuard Securities</span>
-            </p>
-        </div>
-
-        <!-- Footer -->
-        <div class="footer">
-            <div class="footer-section">
-                <div class="footer-title">Contact Information</div>
-                <div style="margin: 8px 0; font-size: 13px;">
-                    <strong>Address:</strong><br>
-                    6060 Parkland Boulevard, Suite 200<br>
-                    Mayfield Heights, OH 44124<br><br>
-                    <strong>Phone:</strong> <a href="tel:+12162507891" class="footer-link">+1 216 250-7891</a><br>
-                    <strong>Email:</strong> <a href="mailto:{{supportEmail}}" class="footer-link">{{supportEmail}}</a><br>
-                    <strong>Website:</strong> <a href="https://safeguardsecurities.us" class="footer-link">safeguardsecurities.us</a>
-                </div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="footer-section">
-                <div class="footer-title">Support &amp; Resources</div>
-                <div style="font-size: 12px;">
-                    <a href="{{clientPortalUrl}}" class="footer-link">Client Portal</a> |
-                    <a href="https://safeguardsecurities.us/contact" class="footer-link">Contact Support</a>
-                </div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="footer-note">
-                SafeGuard Securities, Inc. | Professional Trading Platform<br>
-                &copy; 2026 SafeGuard Securities. All rights reserved.<br><br>
-                This message relates to servicing your existing account and is not investment advice.<br>
-                Your Account Executive: <strong>{{EXECUTIVE_NAME}}</strong>
-            </div>
-        </div>
-    </div>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
