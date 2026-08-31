@@ -7,9 +7,11 @@
 // two on one screen made the funding queue grow forever and buried the
 // evidence finance actually needs to retrieve later.
 //
-// Today the only source is a funded fundingRequest (a deposit). The shape
-// carries `type` so withdrawals/adjustments can join later without changing
-// every call site.
+// Both deposit paths land here as funded fundingRequests: the client-requested
+// flow (request -> approve -> confirm receipt) and the desk-recorded top-up
+// (fundingService.addFundsToClient), told apart by `source`. The shape carries
+// `type` so withdrawals/adjustments can join later without changing every call
+// site.
 import { getAllFundingRequests, requestReference, type FundingRequest, type PaymentProof } from './fundingService';
 
 export type TransactionType = 'deposit';
@@ -29,6 +31,12 @@ export interface Transaction {
   requestedAt?: Date;
   approvedAt?: Date;
   proofs: PaymentProof[];
+  /** 'admin' = desk-recorded top-up (no client request); 'client' = normal flow. */
+  source: 'client' | 'admin';
+  /** Finance memo on an admin-recorded credit. */
+  note?: string;
+  /** Which admin recorded it - only set on source==='admin'. */
+  recordedByEmail?: string;
 }
 
 function toTransaction(f: FundingRequest): Transaction {
@@ -46,6 +54,9 @@ function toTransaction(f: FundingRequest): Transaction {
     requestedAt: f.createdAt,
     approvedAt: f.approvedAt,
     proofs: f.paymentProofs ?? [],
+    source: f.source === 'admin' ? 'admin' : 'client',
+    note: f.note,
+    recordedByEmail: f.recordedByEmail,
   };
 }
 
@@ -74,7 +85,7 @@ const iso = (d?: Date) => (d ? d.toISOString() : '');
 /** Finance-facing export: one row per transaction, proof URLs included. */
 export function buildTransactionsCsv(rows: Transaction[]): string {
   const headers = [
-    'Reference', 'Type', 'Client', 'Amount USD', 'Completed At',
+    'Reference', 'Type', 'Source', 'Recorded By', 'Note', 'Client', 'Amount USD', 'Completed At',
     'Requested At', 'Payment Claimed At', 'Proof Count', 'Proof URLs',
   ];
   const lines = [headers.join(',')];
@@ -82,6 +93,9 @@ export function buildTransactionsCsv(rows: Transaction[]): string {
     lines.push([
       csvCell(t.reference),
       csvCell(t.type),
+      csvCell(t.source),
+      csvCell(t.recordedByEmail ?? ''),
+      csvCell(t.note ?? ''),
       csvCell(t.userEmail ?? t.userId),
       csvCell(t.amount.toFixed(2)),
       csvCell(iso(t.completedAt)),

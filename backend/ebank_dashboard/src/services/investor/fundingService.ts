@@ -3,7 +3,7 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { fundingReference } from './fundingDetailsService';
 import { db, storage } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
-import { createWalletForUser, getUserWallet, updateWalletBalance } from './walletService';
+import { creditWallet, ensureWalletRef } from './walletService';
 
 // Two-step lifecycle (2026-08-24): 'approved' now means "approved - funding
 // details sent to the client, awaiting their payment" (awaitingPayment=true);
@@ -38,6 +38,12 @@ export interface FundingRequest {
   paymentProofs?: PaymentProof[]; // receipts the client uploaded after claiming
   emailSentAt?: Date;
   emailError?: string;
+  /** 'admin' = recorded straight onto the client by staff (no client request). */
+  source?: 'client' | 'admin';
+  /** Free-text finance memo on an admin-recorded credit (wire ref, reason). */
+  note?: string;
+  recordedByEmail?: string;
+  recordedByUid?: string;
 }
 
 function mapFunding(id: string, data: DocumentData): FundingRequest {
@@ -65,6 +71,10 @@ function mapFunding(id: string, data: DocumentData): FundingRequest {
       : [],
     emailSentAt: data.emailSentAt?.toDate?.(),
     emailError: data.emailError,
+    source: data.source === 'admin' ? 'admin' : 'client',
+    note: data.note,
+    recordedByEmail: data.recordedByEmail,
+    recordedByUid: data.recordedByUid,
   };
 }
 
@@ -237,14 +247,108 @@ export async function confirmFundingReceived(request: FundingRequest) {
   if (request.status !== 'approved' || request.awaitingPayment !== true) {
     throw new Error('Only approved requests awaiting payment can be marked funded.');
   }
-  const wallet = await getUserWallet(request.userId);
-  const walletId = wallet ? wallet.id : (await createWalletForUser(request.userId)).id;
-  const currentBalance = wallet ? wallet.balance : 0;
-  await updateWalletBalance(walletId, currentBalance + request.amount);
+  const { newBalance } = await creditWallet(request.userId, request.amount);
   await updateDoc(doc(db, LIVE_COLLECTIONS.fundingRequests, request.id), {
     status: 'funded',
     awaitingPayment: false,
     fundedAt: new Date(),
     updatedAt: new Date(),
+  });
+  return newBalance;
+}
+
+// ---- admin-recorded funding (top-up) ----
+
+// A client who is already funded rarely files a fresh in-app request when they
+// wire more money - they just send it and call their account manager. Before
+// this, finance had no way to record that: the only path to a wallet credit was
+// client request -> approve -> confirm receipt, so the money either sat
+// uncredited or someone edited a balance out of band with no paper trail.
+//
+// This records the deposit the same way the normal flow ends up: a funding
+// request that is BORN 'funded', with its own SG-FUND reference, so it lands on
+// Transactions, exports in the finance CSV and prints an invoice/receipt like
+// any other deposit. `source: 'admin'` marks it as desk-recorded rather than
+// client-requested.
+//
+// Counter bump + request doc + wallet credit all commit in ONE transaction:
+// there is no window where the reference is burned but the money is not in, or
+// the wallet moved but nothing recorded it.
+//
+// No email fires: sendFundingDetailsOnApproval only triggers on pending ->
+// approved, and payment instructions would make no sense for money that has
+// already arrived.
+
+/** Sanity ceiling on a single manual credit - catches a slipped decimal point. */
+export const MAX_MANUAL_CREDIT = 10_000_000;
+
+export interface AddFundsInput {
+  userId: string;
+  userEmail?: string;
+  amount: number;
+  /** Finance memo: wire reference, "top-up per call 2026-08-31", etc. */
+  note?: string;
+  adminUid: string;
+  adminEmail?: string;
+}
+
+export interface AddFundsResult {
+  requestId: string;
+  reference: string;
+  amount: number;
+  previousBalance: number;
+  newBalance: number;
+}
+
+export async function addFundsToClient(input: AddFundsInput): Promise<AddFundsResult> {
+  if (!input.userId) throw new Error('Pick a client first.');
+  if (!input.adminUid) throw new Error('Your admin session expired - sign in again.');
+  const amount = Math.round(Number(input.amount) * 100) / 100; // money, to the cent
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Enter an amount greater than zero.');
+  }
+  if (amount > MAX_MANUAL_CREDIT) {
+    throw new Error(`Single credits are capped at ${MAX_MANUAL_CREDIT.toLocaleString('en-US')} - split it or check the decimal point.`);
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const counterRef = doc(db, 'counters', `funding-${year}`);
+  // Resolved before the transaction: the wallet is found by query, and a
+  // transaction can only read a known doc ref.
+  const walletRef = await ensureWalletRef(input.userId);
+  const requestRef = doc(collection(db, LIVE_COLLECTIONS.fundingRequests));
+
+  return runTransaction(db, async (tx) => {
+    // All reads before any write - Firestore transaction rule.
+    const counterSnap = await tx.get(counterRef);
+    const walletSnap = await tx.get(walletRef);
+    if (!walletSnap.exists()) throw new Error('Wallet no longer exists - reload and try again.');
+
+    const next = (counterSnap.exists() ? Number(counterSnap.data().value ?? 0) : 0) + 1;
+    const reference = `SG-FUND${String(year % 100).padStart(2, '0')}${String(next).padStart(5, '0')}`;
+    const previousBalance = Number(walletSnap.data().balance ?? 0);
+    const newBalance = previousBalance + amount;
+
+    tx.set(counterRef, { value: next });
+    tx.set(requestRef, {
+      userId: input.userId,
+      userEmail: input.userEmail ?? '',
+      amount,
+      status: 'funded',
+      awaitingPayment: false,
+      reference,
+      source: 'admin',
+      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
+      recordedByUid: input.adminUid,
+      recordedByEmail: input.adminEmail ?? '',
+      createdAt: now,
+      approvedAt: now, // the invoice dates off this; recording IS the approval
+      fundedAt: now,
+      updatedAt: now,
+    });
+    tx.update(walletRef, { balance: newBalance, updatedAt: now });
+
+    return { requestId: requestRef.id, reference, amount, previousBalance, newBalance };
   });
 }

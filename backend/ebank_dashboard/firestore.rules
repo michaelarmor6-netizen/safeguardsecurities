@@ -135,10 +135,15 @@ service cloud.firestore {
     // Investor funding requests - owner can read/create their own, only admins approve/reject.
     // Owners may additionally update ONLY paymentClaimedAt / paymentProofs (+updatedAt) - the
     // "I've sent the payment" button - never status/amount/reference.
+    // Admins may also create a request FOR a client: the desk-recorded top-up
+    // (fundingService.addFundsToClient), which is born 'funded' alongside the
+    // wallet credit so money that arrived out of band still gets a reference,
+    // a transaction row and an invoice.
     match /fundingRequests/{requestId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow create: if (request.auth != null && request.resource.data.userId == request.auth.uid) ||
+        isInvestorAdmin();
       allow update: if isInvestorAdmin() ||
         (request.auth != null && resource.data.userId == request.auth.uid &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt']));

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { Plus } from 'lucide-react';
 import { approveFundingRequest, confirmFundingReceived, getAllFundingRequests, markFundingEmailSent, requestReference, updateFundingRequest } from '../../../services/investor/fundingService';
 import type { FundingRequest } from '../../../services/investor/fundingService';
 
+import AddClientFundsPanel from './funding/AddClientFundsPanel';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../services/investor/auditService';
 
@@ -25,6 +27,7 @@ export default function InvestorAdminFundingPage() {
   const { user, profile: adminProfile } = useInvestorAuth();
   const [rows, setRows] = useState<FundingRequest[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [addingFunds, setAddingFunds] = useState(false);
   // This queue is ONLY open work: pending review, awaiting payment, rejected.
   // Settled money - 'funded' rows AND legacy approved-and-credited rows (the
   // pre-2026-08-24 one-step flow, awaitingPayment unset) - lives on the
@@ -101,13 +104,26 @@ export default function InvestorAdminFundingPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="sg-page-title">Funding Requests</h1>
-        <p className="sg-page-sub mt-1">
-          Approve to send deposit instructions; confirm receipt to credit the wallet. A confirmed
-          request moves to Transactions. Instructions content lives in Settings → Funding Details.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="sg-page-title">Funding Requests</h1>
+          <p className="sg-page-sub mt-1">
+            Approve to send deposit instructions; confirm receipt to credit the wallet. A confirmed
+            request moves to Transactions. Instructions content lives in Settings → Funding Details.
+          </p>
+        </div>
+        {/* Top-ups from clients who are already funded rarely come through this
+            queue - they wire the money and call their manager. That deposit is
+            recorded here rather than by editing a balance. */}
+        {!addingFunds && (
+          <button type="button" className="sg-action-btn !px-4 !py-2 flex items-center gap-1.5" onClick={() => setAddingFunds(true)}>
+            <Plus className="h-4 w-4" />
+            Add funds to a client
+          </button>
+        )}
       </div>
+
+      {addingFunds && <AddClientFundsPanel onCredited={load} onClose={() => setAddingFunds(false)} />}
       <div className="sg-panel overflow-x-auto">
         <table className="min-w-full text-sm">
           <thead className="sg-text-muted">
@@ -183,9 +199,9 @@ export default function InvestorAdminFundingPage() {
                         className="sg-action-btn"
                         disabled={busyId === f.id}
                         onClick={() => run(f.id, async () => {
-                          await confirmFundingReceived(f);
-                          if (user) logAction(user.uid, adminProfile?.email ?? '', 'Funding receipt confirmed - wallet credited', `${f.userEmail ?? f.userId}: ${fmt(f.amount)} (${requestReference(f)})`);
-                          toast.success('Receipt confirmed - wallet credited');
+                          const newBalance = await confirmFundingReceived(f);
+                          if (user) logAction(user.uid, adminProfile?.email ?? '', 'Funding receipt confirmed - wallet credited', `${f.userEmail ?? f.userId}: ${fmt(f.amount)} (${requestReference(f)}) - new balance ${fmt(newBalance)}`);
+                          toast.success(`Receipt confirmed - wallet credited, new balance ${fmt(newBalance)}`);
                         })}
                       >
                         Confirm receipt &amp; credit

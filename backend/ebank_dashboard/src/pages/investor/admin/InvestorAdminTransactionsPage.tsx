@@ -83,8 +83,8 @@ export default function InvestorAdminTransactionsPage() {
         <div>
           <h1 className="sg-page-title">Transactions</h1>
           <p className="sg-page-sub mt-1">
-            Completed deposits with the client's proof of payment. Requests still in progress live
-            on Funding Requests.
+            Completed deposits - both client-requested and desk-recorded top-ups - with the
+            client's proof of payment. Requests still in progress live on Funding Requests.
           </p>
         </div>
         <button type="button" className="sg-action-btn flex items-center gap-2" onClick={onExport}>
@@ -172,11 +172,27 @@ export default function InvestorAdminTransactionsPage() {
                 </td>
                 <td className="p-4 sg-text-muted font-mono text-xs whitespace-nowrap">{t.reference}</td>
                 <td className="p-4 sg-text-main">{t.userEmail ?? t.userId}</td>
-                <td className="p-4 sg-text-muted capitalize">{t.type}</td>
+                <td className="p-4 sg-text-muted capitalize">
+                  {t.type}
+                  {/* A desk-recorded top-up has no client request and no proof
+                      upload behind it - say who put it on the books instead. */}
+                  {t.source === 'admin' && (
+                    <span className="block text-[11px] normal-case mt-0.5" style={{ color: 'var(--sg-gold)' }}>
+                      recorded by {t.recordedByEmail || 'staff'}
+                    </span>
+                  )}
+                  {t.note && (
+                    <span className="block text-[11px] normal-case mt-0.5" style={{ color: 'var(--sg-muted-2)' }}>
+                      {t.note}
+                    </span>
+                  )}
+                </td>
                 <td className="p-4 font-semibold" style={{ color: 'var(--sg-teal)' }}>{fmt(t.amount)}</td>
                 <td className="p-4">
                   {t.proofs.length === 0 ? (
-                    <span className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>none attached</span>
+                    <span className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>
+                      {t.source === 'admin' ? 'n/a - recorded at the desk' : 'none attached'}
+                    </span>
                   ) : (
                     <div className="space-y-1">
                       {t.proofs.map((p, i) => (
