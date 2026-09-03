@@ -93,7 +93,7 @@ export default function InvestorAdminTransactionsPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="sg-panel p-4">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Transactions</p>
           <p className="text-2xl font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>
@@ -146,8 +146,8 @@ export default function InvestorAdminTransactionsPage() {
         )}
       </div>
 
-      <div className="sg-panel overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
+        <table className="min-w-full text-sm sg-table-stack">
           <thead className="sg-text-muted">
             <tr>
               <th className="text-left p-4">Completed</th>
@@ -162,7 +162,7 @@ export default function InvestorAdminTransactionsPage() {
           <tbody>
             {filtered.map((t) => (
               <tr key={t.id} className="border-t sg-row-border align-top">
-                <td className="p-4 sg-text-muted whitespace-nowrap">
+                <td className="p-4 sg-text-muted whitespace-nowrap" data-label="Completed">
                   {dt(t.completedAt)}
                   {t.paymentClaimedAt && (
                     <div className="text-xs mt-0.5" style={{ color: 'var(--sg-muted-2)' }}>
@@ -170,9 +170,9 @@ export default function InvestorAdminTransactionsPage() {
                     </div>
                   )}
                 </td>
-                <td className="p-4 sg-text-muted font-mono text-xs whitespace-nowrap">{t.reference}</td>
-                <td className="p-4 sg-text-main">{t.userEmail ?? t.userId}</td>
-                <td className="p-4 sg-text-muted capitalize">
+                <td className="p-4 sg-text-muted font-mono text-xs whitespace-nowrap" data-label="Reference">{t.reference}</td>
+                <td className="p-4 sg-text-main" data-label="Client">{t.userEmail ?? t.userId}</td>
+                <td className="p-4 sg-text-muted capitalize" data-label="Type">
                   {t.type}
                   {/* A desk-recorded top-up has no client request and no proof
                       upload behind it - say who put it on the books instead. */}
@@ -187,8 +187,8 @@ export default function InvestorAdminTransactionsPage() {
                     </span>
                   )}
                 </td>
-                <td className="p-4 font-semibold" style={{ color: 'var(--sg-teal)' }}>{fmt(t.amount)}</td>
-                <td className="p-4">
+                <td className="p-4 font-semibold" data-label="Amount" style={{ color: 'var(--sg-teal)' }}>{fmt(t.amount)}</td>
+                <td className="p-4" data-label="Proof">
                   {t.proofs.length === 0 ? (
                     <span className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>
                       {t.source === 'admin' ? 'n/a - recorded at the desk' : 'none attached'}

@@ -369,3 +369,120 @@
   .sg-ticker-track { animation: none; }
   .sg-ticker-viewport { overflow-x: auto; }
 }
+
+
+/* ── Mobile ──────────────────────────────────────────────────
+   The admin console was built desktop-first: a fixed 256px sidebar and
+   eight-column tables. The sidebar is now an off-canvas drawer below lg
+   (InvestorAdminLayout); the rules here fix the two remaining problems -
+   tables that can only be read by scrolling sideways, and controls too
+   small to hit with a thumb. */
+
+/* A control that must be comfortably tappable. 44px is the accessibility
+   floor for a touch target; on a mouse the size is left alone. */
+.sg-tap-target {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+@media (pointer: coarse) {
+  .sg-action-btn,
+  .sg-danger-btn,
+  .sg-btn-ghost {
+    min-height: 40px;
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+  }
+  /* iOS zooms the page when a focused input's text is under 16px. */
+  .sg-input {
+    font-size: 16px;
+  }
+}
+
+/* Turn a wide table into a list of cards, one per row.
+   Add `sg-table-stack` to the <table> and `data-label="Column"` to each
+   <td>; the label is drawn from the attribute, so the markup keeps working
+   as an ordinary table on desktop. A <td> with no data-label (an actions
+   cell, say) spans the full card width with no label. */
+@media (max-width: 767px) {
+  .sg-table-stack,
+  .sg-table-stack tbody,
+  .sg-table-stack tr,
+  .sg-table-stack td {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Headers move into each cell's ::before, but stay for screen readers. */
+  .sg-table-stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .sg-table-stack tr {
+    border: 1px solid var(--sg-border);
+    border-radius: 12px;
+    background: var(--sg-bg-elevated);
+    margin-bottom: 0.75rem;
+    padding: 0.25rem 0;
+  }
+  .sg-table-stack tr:last-child { margin-bottom: 0; }
+
+  .sg-table-stack td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0.875rem;
+    border: 0;
+    text-align: right;
+  }
+
+  .sg-table-stack td[data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 38%;
+    text-align: left;
+    font-family: var(--sg-font-body);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--sg-muted-2);
+    padding-top: 0.15rem;
+  }
+
+  /* Unlabelled cells (actions) get the full width and sit left. */
+  .sg-table-stack td:not([data-label]) {
+    text-align: left;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    border-top: 1px solid var(--sg-border);
+    margin-top: 0.25rem;
+    padding-top: 0.6rem;
+  }
+
+  /* Row content is right-aligned against its label; anything internally laid
+     out (button groups, stacked name/email) should not inherit that. */
+  .sg-table-stack td > * { text-align: left; }
+  .sg-table-stack td > div,
+  .sg-table-stack td > span { margin-left: auto; }
+  .sg-table-stack td:not([data-label]) > div,
+  .sg-table-stack td:not([data-label]) > span { margin-left: 0; }
+
+  /* The wrapper no longer needs to scroll - nothing overflows once stacked. */
+  .sg-table-stack-wrap { overflow-x: visible !important; }
+}

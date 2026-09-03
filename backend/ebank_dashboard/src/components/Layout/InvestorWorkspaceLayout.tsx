@@ -1,5 +1,7 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
+  Menu,
+  X,
   LayoutDashboard,
   History,
   Briefcase,
@@ -135,7 +137,7 @@ function SettingsFlyout() {
       <NavLink
         to={`/workspace/settings/${DEFAULT_SETTINGS_SECTION}`}
         className={({ isActive }) =>
-          `flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm transition ${
+          `flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 lg:py-2 text-sm transition ${
             isActive ? 'sg-nav-active' : ''
           }`
         }
@@ -146,8 +148,11 @@ function SettingsFlyout() {
       </NavLink>
 
       {open && anchor && (
+        // Hidden below lg: it is positioned off the sidebar's right edge, which
+        // on a phone lands past the viewport. Tapping Settings navigates to the
+        // default section instead, which is the useful outcome anyway.
         <div
-          className="fixed z-50 w-60 p-3 space-y-4 shadow-xl"
+          className="hidden lg:block fixed z-50 w-60 p-3 space-y-4 shadow-xl"
           style={{
             top: anchor.top,
             left: anchor.left,
@@ -201,6 +206,23 @@ export default function InvestorWorkspaceLayout() {
   const [tickerAt, setTickerAt] = useState<Date | null>(null);
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings | null>(null);
   const [unseenAlerts, setUnseenAlerts] = useState(0);
+  // Same fix as the admin console: the 224px sidebar was unconditional, so on a
+  // phone it took most of the screen. Off-canvas below lg, unchanged above it.
+  // This matters more here than in admin - most retail clients are on a phone.
+  const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => { setNavOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setNavOpen(false); };
+    window.addEventListener('keydown', onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [navOpen]);
   const displayName = profile?.displayName ?? profile?.firstName ?? profile?.email?.split('@')[0] ?? 'Investor';
   const initial = displayName.charAt(0).toUpperCase();
   const isPreview = accountStatus === 'pending';
@@ -253,11 +275,31 @@ export default function InvestorWorkspaceLayout() {
 
   return (
     <WorkspaceGuard>
-      <div className="sg-shell flex">
+      <div className="sg-shell lg:flex">
+        {navOpen && (
+          <div
+            className="fixed inset-0 z-40 lg:hidden"
+            style={{ background: 'rgba(2,6,23,.65)' }}
+            onClick={() => setNavOpen(false)}
+            aria-hidden="true"
+          />
+        )}
         <aside
-          className="w-56 border-r flex flex-col shrink-0"
+          className={`fixed inset-y-0 left-0 z-50 w-56 max-w-[80vw] border-r flex flex-col
+            transition-transform duration-200 ease-out
+            lg:static lg:z-auto lg:translate-x-0 lg:max-w-none lg:shrink-0
+            ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}
           style={{ borderColor: 'var(--sg-border)', background: 'var(--sg-bg-panel)' }}
         >
+          <button
+            type="button"
+            onClick={() => setNavOpen(false)}
+            aria-label="Close menu"
+            className="lg:hidden absolute top-2 right-2 sg-tap-target"
+            style={{ color: 'var(--sg-muted)' }}
+          >
+            <X className="h-5 w-5" />
+          </button>
           <div className="p-4 border-b" style={{ borderColor: 'var(--sg-border)' }}>
             <img src="/logo.png" alt="SafeGuard Securities" className="h-10 w-auto max-w-full object-contain" />
             <p
@@ -275,7 +317,7 @@ export default function InvestorWorkspaceLayout() {
                 to={to}
                 end={end}
                 className={({ isActive }) =>
-                  `flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm transition ${
+                  `flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 lg:py-2 text-sm transition ${
                     isActive ? 'sg-nav-active' : ''
                   }`
                 }
@@ -314,7 +356,7 @@ export default function InvestorWorkspaceLayout() {
                 key={to}
                 to={to}
                 className={({ isActive }) =>
-                  `flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm transition ${
+                  `flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 lg:py-2 text-sm transition ${
                     isActive ? 'sg-nav-active' : ''
                   }`
                 }
@@ -330,7 +372,7 @@ export default function InvestorWorkspaceLayout() {
                 await signOut();
                 window.location.href = 'https://safeguardsecurities.us';
               }}
-              className="w-full flex items-center gap-2.5 rounded-[10px] px-3 py-2 text-sm transition"
+              className="w-full flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 lg:py-2 text-sm transition"
               style={{ color: 'var(--sg-muted-2)' }}
             >
               <LogOut className="h-4 w-4 shrink-0" />
@@ -341,10 +383,20 @@ export default function InvestorWorkspaceLayout() {
 
         <div className="flex-1 flex flex-col min-w-0">
           <header
-            className="border-b px-5 py-3 flex items-center justify-between gap-4"
-            style={{ borderColor: 'var(--sg-border)', background: 'color-mix(in srgb, var(--sg-bg-panel) 85%, transparent)' }}
+            className="border-b px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30"
+            style={{ borderColor: 'var(--sg-border)', background: 'var(--sg-bg-panel)' }}
           >
-            <img src="/logo.png" alt="" className="h-8 w-auto max-w-[160px] object-contain hidden sm:block" />
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={navOpen}
+              className="sg-tap-target lg:hidden -ml-2"
+              style={{ color: 'var(--sg-text)' }}
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <img src="/logo.png" alt="" className="h-7 sm:h-8 w-auto max-w-[130px] sm:max-w-[160px] object-contain" />
             <div className="flex items-center gap-3 ml-auto">
               <ThemeToggle />
               {/* Trade Desk entry: always visible; standard-tier clients see a
@@ -417,7 +469,7 @@ export default function InvestorWorkspaceLayout() {
 
           {platformSettings?.announcementEnabled && platformSettings.announcementMessage && (
             <div
-              className="border-b px-5 py-2.5 text-sm flex items-center gap-2"
+              className="border-b px-3 sm:px-5 py-2.5 text-sm flex items-start gap-2"
               style={{
                 borderColor: 'rgba(99,102,241,.3)',
                 background: 'rgba(99,102,241,.1)',
@@ -431,7 +483,7 @@ export default function InvestorWorkspaceLayout() {
 
           {ticker.length > 0 && (
             <div
-              className="border-b px-5 py-2 flex items-center gap-4 overflow-hidden text-xs"
+              className="border-b px-3 sm:px-5 py-2 flex items-center gap-3 sm:gap-4 overflow-hidden text-xs"
               style={{ borderColor: 'var(--sg-border)', background: 'var(--sg-bg-elevated)' }}
             >
               <span
@@ -484,7 +536,7 @@ export default function InvestorWorkspaceLayout() {
             </div>
           )}
 
-          <main className="flex-1 overflow-auto p-5 md:p-6 relative z-10">
+          <main className="flex-1 overflow-auto p-4 sm:p-5 md:p-6 relative z-10">
             <Outlet context={{ displayName }} />
           </main>
         </div>

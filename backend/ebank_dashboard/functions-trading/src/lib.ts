@@ -82,3 +82,72 @@ export function isWithinTradeCorrectionWindow(executedAt: Date): boolean {
   const ageMs = Date.now() - executedAt.getTime();
   return ageMs <= TRADE_CORRECTION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 }
+
+// ---- role separation ----------------------------------------------------
+// requireInvestorAdmin above treats every non-client role as an admin, which
+// means a support agent hired to answer tickets can move client money. These
+// lists mirror the predicates in firestore.rules - change both together.
+
+/** Anyone on staff. Enough to READ client data, never to move money. */
+export const STAFF_ROLES = ['support', 'admin', 'finance', 'compliance', 'super_admin'] as const;
+/** Credits, debits, funding decisions. */
+export const FINANCE_ROLES = ['finance', 'admin', 'super_admin'] as const;
+/** KYC and sanctions outcomes. */
+export const COMPLIANCE_ROLES = ['compliance', 'admin', 'super_admin'] as const;
+
+export async function requireRole(
+  request: CallableRequest,
+  allowed: readonly string[],
+  action: string,
+): Promise<string> {
+  const uid = requireAuth(request);
+  const snap = await getFirestore().doc(`profiles/${uid}`).get();
+  const role = snap.exists ? (snap.data()?.role as string | undefined) : undefined;
+  if (!role || !allowed.includes(role)) {
+    throw new HttpsError('permission-denied', `Your role cannot ${action}.`);
+  }
+  return uid;
+}
+
+/** Gate for anything that changes a wallet balance. */
+export function requireFinanceAdmin(request: CallableRequest): Promise<string> {
+  return requireRole(request, FINANCE_ROLES, 'move client funds');
+}
+
+// ---- money ---------------------------------------------------------------
+
+/**
+ * Cash is stored as a JS number, so every arithmetic result is snapped back to
+ * whole cents. Without this, repeated credits accumulate float dust
+ * (0.1 + 0.2 = 0.30000000000000004) and the wallet slowly stops matching the
+ * ledger sum it is supposed to equal.
+ */
+export function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+/** Sanity ceiling on one manual credit - catches a slipped decimal point. */
+export const MAX_MANUAL_CREDIT = 10_000_000;
+
+/**
+ * Validate an admin-entered credit amount. Rejects junk, zero, negatives and
+ * implausible figures before any of it reaches a balance.
+ */
+export function normalizeCreditAmount(raw: unknown): number {
+  const amount = roundMoney(Number(raw));
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new HttpsError('invalid-argument', 'Enter an amount greater than zero.');
+  }
+  if (amount > MAX_MANUAL_CREDIT) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Single credits are capped at ${MAX_MANUAL_CREDIT.toLocaleString('en-US')} - split it or check the decimal point.`,
+    );
+  }
+  return amount;
+}
+
+/** SG-FUND{YY}{NNNNN} from a per-year sequence. Mirrors the client-side generator. */
+export function fundingReferenceFor(year: number, sequence: number): string {
+  return `SG-FUND${String(year % 100).padStart(2, '0')}${String(sequence).padStart(5, '0')}`;
+}

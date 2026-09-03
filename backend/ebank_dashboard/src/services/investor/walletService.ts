@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDocs, onSnapshot, query, runTransaction, updateDoc, where, type DocumentData, type DocumentReference, type Unsubscribe } from 'firebase/firestore';
+import { addDoc, collection, getDocs, onSnapshot, query, where, type DocumentData, type Unsubscribe } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 
@@ -42,50 +42,16 @@ export async function createWalletForUser(userId: string) {
   });
 }
 
-export async function updateWalletBalance(walletId: string, balance: number) {
-  await updateDoc(doc(db, LIVE_COLLECTIONS.wallets, walletId), { balance, updatedAt: new Date() });
-}
-
-// The client's wallet doc ref, creating an empty wallet if they have never
-// been funded. Callers that need the ref inside a runTransaction must resolve
-// it FIRST: the wallet is found by query (where userId ==) and Firestore
-// transactions can only read a known doc ref, never run a query.
-export async function ensureWalletRef(userId: string): Promise<DocumentReference<DocumentData>> {
-  const existing = await getUserWallet(userId);
-  return existing
-    ? doc(db, LIVE_COLLECTIONS.wallets, existing.id)
-    : await createWalletForUser(userId);
-}
-
-export interface WalletCreditResult {
-  walletId: string;
-  previousBalance: number;
-  newBalance: number;
-}
-
-// Atomic balance change - the ONLY way money should move into a wallet.
-// Read-then-write (read the balance, write current + amount) silently loses a
-// credit whenever two land together: two admins confirming receipt at once, or
-// an admin top-up racing a confirmation. A transaction serialises the
-// read-modify-write so each credit is applied exactly once. `delta` may be
-// negative for a correction, but never past zero.
-export async function creditWallet(userId: string, delta: number): Promise<WalletCreditResult> {
-  if (!Number.isFinite(delta) || delta === 0) {
-    throw new Error('Credit amount must be a non-zero number.');
-  }
-  const walletRef = await ensureWalletRef(userId);
-  return runTransaction(db, async (tx) => {
-    const snap = await tx.get(walletRef);
-    if (!snap.exists()) throw new Error('Wallet no longer exists - reload and try again.');
-    const previousBalance = Number(snap.data().balance ?? 0);
-    const newBalance = previousBalance + delta;
-    if (newBalance < 0) {
-      throw new Error('That would take the wallet below zero.');
-    }
-    tx.update(walletRef, { balance: newBalance, updatedAt: new Date() });
-    return { walletId: walletRef.id, previousBalance, newBalance };
-  });
-}
+// Balances are NOT writable from the browser any more. cashLedger is
+// function-only (`allow write: if false`) so it can stand as the immutable
+// record of cash, which meant any browser-side credit was structurally unable
+// to post to it - that is how deposits came to be missing from the ledger the
+// account statement is built from. Every credit now runs through the
+// confirmFundingReceipt / recordClientDeposit callables in functions-trading,
+// which write wallet and ledger in one Admin-SDK transaction under a finance
+// role. firestore.rules refuses wallet balance updates from clients outright,
+// so re-adding a setter here would fail at the rules layer rather than
+// silently reintroducing the split-brain.
 
 // Live balance for the investor Wallet page - updates the moment funding is
 // confirmed, without a refresh.

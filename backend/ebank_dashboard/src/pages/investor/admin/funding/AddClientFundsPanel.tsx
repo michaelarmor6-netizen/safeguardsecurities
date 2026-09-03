@@ -117,13 +117,14 @@ export default function AddClientFundsPanel({ preselectUserId, onCredited, onClo
     if (!selected || !amountValid || !user) return;
     setBusy(true);
     try {
+      // Who is recording this is taken from the callable's auth context on the
+      // server, never from the browser - a client-supplied admin id would be
+      // worth nothing in an audit trail.
       const result = await addFundsToClient({
         userId: selected.profile.id,
         userEmail: selected.profile.email,
         amount: parsedAmount,
         note,
-        adminUid: user.uid,
-        adminEmail: adminProfile?.email ?? '',
       });
       logAction(
         user.uid,

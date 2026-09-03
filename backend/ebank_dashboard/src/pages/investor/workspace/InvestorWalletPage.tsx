@@ -397,8 +397,8 @@ export default function InvestorWalletPage() {
         <h3 className="font-semibold mb-3" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
           Request History
         </h3>
-        <div className="sg-panel overflow-x-auto">
-          <table className="min-w-full text-sm">
+        <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
+          <table className="min-w-full text-sm sg-table-stack">
             <thead className="sg-text-muted">
               <tr>
                 <th className="text-left p-4">Date</th>
@@ -410,9 +410,9 @@ export default function InvestorWalletPage() {
             <tbody>
               {requests.map((r) => (
                 <tr key={r.id} className="border-t sg-row-border">
-                  <td className="p-4 sg-text-muted">{r.createdAt ? r.createdAt.toLocaleDateString() : '—'}</td>
-                  <td className="p-4 text-right sg-text-main">{fmt(r.amount)}</td>
-                  <td className="p-4">
+                  <td className="p-4 sg-text-muted" data-label="Date">{r.createdAt ? r.createdAt.toLocaleDateString() : '—'}</td>
+                  <td className="p-4 text-right sg-text-main" data-label="Amount">{fmt(r.amount)}</td>
+                  <td className="p-4" data-label="Status">
                     <span className="text-xs font-semibold uppercase" style={{ color: statusColor[r.status] }}>
                       {r.status === 'approved' && r.awaitingPayment !== true ? 'approved' : statusLabel[r.status]}
                     </span>

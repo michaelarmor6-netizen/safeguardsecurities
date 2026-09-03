@@ -89,10 +89,37 @@ service cloud.firestore {
     // --- Safeguard investor platform (VITE_APP_MODE=safeguard) ---
     // Separate role model from the bank users/{} collection above:
     // profiles/{uid}.role is one of client|support|admin|finance|compliance|super_admin.
-    function isInvestorAdmin() {
+    // Separation of duties. isInvestorAdmin() used to mean "any role that is not
+    // 'client'", so a support agent hired to answer tickets could credit wallets,
+    // approve funding and delete profiles - the six roles the UI presents were
+    // cosmetic at the data layer. Each predicate below names the roles that may
+    // perform that class of action. Mirrors STAFF_ROLES / FINANCE_ROLES /
+    // COMPLIANCE_ROLES in functions-trading/src/lib.ts - change both together.
+    function investorRole() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role;
+    }
+    function hasRole(roles) {
       return request.auth != null &&
         exists(/databases/$(database)/documents/profiles/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.role != 'client';
+        investorRole() in roles;
+    }
+
+    // Anyone on staff: enough to READ client data across the platform. Keeps
+    // the old name because the read rules throughout this file gate on it.
+    function isInvestorAdmin() {
+      return hasRole(['support', 'admin', 'finance', 'compliance', 'super_admin']);
+    }
+    // Money: funding decisions, wallet lifecycle, order management.
+    function isFinance() {
+      return hasRole(['finance', 'admin', 'super_admin']);
+    }
+    // KYC and sanctions outcomes.
+    function isCompliance() {
+      return hasRole(['compliance', 'admin', 'super_admin']);
+    }
+    // Role changes, profile deletion - anything that grants privilege.
+    function isSuperAdmin() {
+      return hasRole(['admin', 'super_admin']);
     }
 
     // Investor profiles - self-provisioned on first login, admin-managed after
@@ -100,29 +127,58 @@ service cloud.firestore {
       allow read: if request.auth != null &&
         (request.auth.uid == uid || isInvestorAdmin());
 
-      // Client creates its own profile document (ensureInvestorProfile)
-      allow create: if request.auth != null && request.auth.uid == uid;
+      // Client creates its own profile document (ensureInvestorProfile).
+      // The fields that grant privilege MUST be pinned here. Without this, a
+      // user could write their own profile with role:'super_admin' on first
+      // sign-in - straight through the SDK, before the app's own create runs -
+      // and hold every staff permission in this file. The update rule below has
+      // always guarded these three; create did not.
+      // The allowlisted bootstrap admin is the one account that may self-create
+      // as staff, matched on its verified Auth email (SUPER_ADMIN_EMAILS in
+      // src/lib/investorRoles.ts - keep in sync).
+      allow create: if request.auth != null && request.auth.uid == uid &&
+        (
+          (request.resource.data.get('role', 'client') == 'client' &&
+           request.resource.data.get('accountStatus', 'pending') == 'pending' &&
+           request.resource.data.get('plan', 'free') == 'free')
+          ||
+          request.auth.token.email == 'admin@safeguardsecurities.us'
+        );
 
       // Self can update own profile but NOT role/accountStatus (privilege escalation guard);
       // admins can update/activate any profile including those fields.
       // `plan` is guarded alongside role/accountStatus: it gates paid AI Engine
       // features, so a client able to write it could self-upgrade for free.
       // get() with a default handles profiles created before plans existed.
+      // Granting privilege is a super-admin act. Everyday staff edits - status,
+      // tier, plan, account manager - stay open to any staff role so long as
+      // they leave `role` untouched.
       allow update: if request.auth != null &&
-        (isInvestorAdmin() ||
+        (isSuperAdmin() ||
+         (isInvestorAdmin() && request.resource.data.role == resource.data.role) ||
          (request.auth.uid == uid &&
           request.resource.data.role == resource.data.role &&
           request.resource.data.accountStatus == resource.data.accountStatus &&
           request.resource.data.get('plan', 'free') == resource.data.get('plan', 'free')));
 
-      allow delete: if isInvestorAdmin();
+      allow delete: if isSuperAdmin();
     }
 
-    // Investor wallets - owner can read their own, only admins create/manage balances
+    // Investor wallets - owner reads their own; staff read all.
+    // BALANCES ARE NOT WRITABLE FROM A BROWSER. Every credit goes through
+    // confirmFundingReceipt / recordClientDeposit in functions-trading, which
+    // write the wallet and its cashLedger entry in one Admin-SDK transaction
+    // (the Admin SDK bypasses these rules). That is the only way the two stay
+    // in agreement: cashLedger is `allow write: if false` further down, so a
+    // browser-side credit could never post to it - which is exactly how
+    // deposits went unledgered and account statements lost their closing
+    // balance. Creating an empty wallet stays open to finance for Wallet Setup.
     match /wallets/{walletId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
-      allow create, update, delete: if isInvestorAdmin();
+      allow create: if isFinance() && request.resource.data.get('balance', 0) == 0;
+      allow update: if false;
+      allow delete: if isSuperAdmin();
     }
 
     // Investor portfolio holdings - owner can read their own, only admins manage
@@ -138,16 +194,19 @@ service cloud.firestore {
     // Admins may also create a request FOR a client: the desk-recorded top-up
     // (fundingService.addFundsToClient), which is born 'funded' alongside the
     // wallet credit so money that arrived out of band still gets a reference,
-    // a transaction row and an invoice.
+    // a transaction row and an invoice. That desk-recorded row is now written
+    // by recordClientDeposit (Admin SDK) alongside the wallet and ledger, so
+    // staff no longer create funding rows from the browser at all.
+    // Approving, rejecting and emailing are FINANCE decisions - a support agent
+    // must not be able to move a request toward a payout.
     match /fundingRequests/{requestId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
-      allow create: if (request.auth != null && request.resource.data.userId == request.auth.uid) ||
-        isInvestorAdmin();
-      allow update: if isInvestorAdmin() ||
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update: if isFinance() ||
         (request.auth != null && resource.data.userId == request.auth.uid &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt']));
-      allow delete: if isInvestorAdmin();
+      allow delete: if isSuperAdmin();
     }
 
     // Funding reference counters (counters/funding-{YYYY}): any signed-in user
@@ -275,12 +334,15 @@ service cloud.firestore {
       allow read, write: if isInvestorAdmin();
     }
 
-    // KYC submissions - owner can create/read their own, only admins review (approve/reject)
+    // KYC submissions - owner creates/reads their own; all staff may read, but
+    // verifying or rejecting an identity is a COMPLIANCE decision and is the
+    // control an auditor will ask to see evidence of.
     match /kycSubmissions/{submissionId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isInvestorAdmin();
+      allow update: if isCompliance();
+      allow delete: if isSuperAdmin();
     }
 
     // Admin-defined model portfolio strategies - admin-only

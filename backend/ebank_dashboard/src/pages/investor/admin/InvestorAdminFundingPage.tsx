@@ -124,8 +124,8 @@ export default function InvestorAdminFundingPage() {
       </div>
 
       {addingFunds && <AddClientFundsPanel onCredited={load} onClose={() => setAddingFunds(false)} />}
-      <div className="sg-panel overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
+        <table className="min-w-full text-sm sg-table-stack">
           <thead className="sg-text-muted">
             <tr>
               <th className="text-left p-4">User</th>
@@ -138,11 +138,11 @@ export default function InvestorAdminFundingPage() {
           <tbody>
             {rows.map((f) => (
               <tr key={f.id} className="border-t sg-row-border">
-                <td className="p-4 sg-text-main">{f.userEmail ?? f.userId}</td>
-                <td className="p-4 sg-text-muted font-mono text-xs">{requestReference(f)}</td>
-                <td className="p-4 sg-text-muted">{fmt(f.amount)}</td>
-                <td className="p-4 sg-text-muted">{statusCell(f)}</td>
-                <td className="p-4 flex gap-2">
+                <td className="p-4 sg-text-main" data-label="Client">{f.userEmail ?? f.userId}</td>
+                <td className="p-4 sg-text-muted font-mono text-xs" data-label="Reference">{requestReference(f)}</td>
+                <td className="p-4 sg-text-muted" data-label="Amount">{fmt(f.amount)}</td>
+                <td className="p-4 sg-text-muted" data-label="Status">{statusCell(f)}</td>
+                <td className="p-4 flex gap-2 flex-wrap">
                   {f.status === 'pending' && (
                     <>
                       <button

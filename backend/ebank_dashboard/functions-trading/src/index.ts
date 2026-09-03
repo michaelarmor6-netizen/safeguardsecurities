@@ -5,10 +5,14 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import {
   requireAuth,
   requireInvestorAdmin,
+  requireFinanceAdmin,
   computeWeightedAverage,
   computePositionUpdate,
   orderStatusToOcean,
   isWithinTradeCorrectionWindow,
+  roundMoney,
+  normalizeCreditAmount,
+  fundingReferenceFor,
 } from './lib';
 import { valueOptionPosition } from './optionValuation';
 
@@ -737,4 +741,281 @@ export const snapshotPortfolios = onSchedule({ schedule: 'every day 21:05' }, as
 export const runPortfolioSnapshotNow = onCall(async (request) => {
   await requireInvestorAdmin(request);
   return snapshotAllPortfolios();
+});
+
+// ══ Funding: the only two paths that may credit a client wallet ══════════
+//
+// These used to run in the browser: the admin's own Firestore session wrote
+// wallets.balance directly. That had two consequences worth naming.
+//
+// First, the cash ledger was skipped. cashLedger is `allow write: if false`
+// in the rules - deliberately function-only, so it can stand as the immutable
+// record - which meant a browser-side credit COULD NOT post to it even in
+// principle. fillOrder posted trades to the ledger; funding never did. The
+// account statement derives its closing balance and cleared-funds figure from
+// that ledger, so a client who deposited without trading had no ledger rows
+// and therefore no closing balance at all.
+//
+// Second, `allow update` on wallets accepted any non-client role, so support
+// accounts could move money.
+//
+// Both are fixed by moving the credit here: one Admin-SDK transaction writes
+// the wallet AND its ledger entry together, gated on a finance role. The rules
+// now refuse browser-side wallet balance writes outright.
+
+const FUNDING_REQUESTS = 'fundingRequests';
+const COUNTERS = 'counters';
+
+interface CreditResult {
+  requestId: string;
+  reference: string;
+  amount: number;
+  previousBalance: number;
+  newBalance: number;
+}
+
+// The browser path used to create a wallet on demand (createWalletForUser)
+// before crediting. Keep that behaviour rather than failing a legitimate
+// deposit because Wallet Setup was never run for this client.
+async function walletRefFor(
+  tx: FirebaseFirestore.Transaction,
+  db: FirebaseFirestore.Firestore,
+  userId: string,
+): Promise<{ ref: FirebaseFirestore.DocumentReference; balance: number; created: boolean }> {
+  const snap = await tx.get(db.collection(WALLETS).where('userId', '==', userId));
+  const existing = snap.docs[0];
+  if (existing) {
+    return { ref: existing.ref, balance: Number(existing.data().balance ?? 0), created: false };
+  }
+  return { ref: db.collection(WALLETS).doc(), balance: 0, created: true };
+}
+
+function writeWalletBalance(
+  tx: FirebaseFirestore.Transaction,
+  wallet: { ref: FirebaseFirestore.DocumentReference; created: boolean },
+  userId: string,
+  balance: number,
+  now: FirebaseFirestore.Timestamp,
+): void {
+  if (wallet.created) {
+    tx.set(wallet.ref, {
+      userId,
+      balance,
+      currency: 'USD',
+      label: 'Primary Wallet',
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    });
+  } else {
+    tx.update(wallet.ref, { balance, updatedAt: now });
+  }
+}
+
+/**
+ * Step 2 of the client-initiated flow: the money arrived, credit it.
+ * Wallet, ledger entry and request status all commit together - there is no
+ * state where the request reads 'funded' but the cash never moved.
+ */
+export const confirmFundingReceipt = onCall(async (request): Promise<CreditResult> => {
+  const adminUid = await requireFinanceAdmin(request);
+  const requestId = String((request.data ?? {}).requestId ?? '').trim();
+  if (!requestId) throw new HttpsError('invalid-argument', 'requestId is required');
+
+  const db = getFirestore();
+  return db.runTransaction(async (tx) => {
+    const requestRef = db.collection(FUNDING_REQUESTS).doc(requestId);
+    const requestSnap = await tx.get(requestRef);
+    if (!requestSnap.exists) throw new HttpsError('not-found', 'Funding request not found');
+    const funding = requestSnap.data()!;
+
+    // Legacy rows (approved before the two-step flow) were credited AT
+    // approval and carry no awaitingPayment flag - crediting again doubles.
+    if (funding.status !== 'approved' || funding.awaitingPayment !== true) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Only approved requests awaiting payment can be marked funded.',
+      );
+    }
+    const amount = roundMoney(Number(funding.amount ?? 0));
+    if (!(amount > 0)) {
+      throw new HttpsError('failed-precondition', 'This request has no amount to credit.');
+    }
+
+    const userId = String(funding.userId ?? '');
+    const wallet = await walletRefFor(tx, db, userId);
+
+    const previousBalance = wallet.balance;
+    const newBalance = roundMoney(previousBalance + amount);
+    const now = Timestamp.now();
+    const reference = String(funding.reference ?? requestId);
+
+    writeWalletBalance(tx, wallet, userId, newBalance, now);
+    tx.set(db.collection(CASH_LEDGER).doc(), {
+      userId,
+      currency: 'USD',
+      entryType: 'deposit',
+      amount,
+      balanceAfter: newBalance,
+      referenceType: 'funding_request',
+      referenceId: requestId,
+      description: `Deposit received - ${reference}`,
+      postedBy: adminUid,
+      postedAt: now,
+    });
+    tx.update(requestRef, {
+      status: 'funded',
+      awaitingPayment: false,
+      fundedAt: now,
+      updatedAt: now,
+    });
+
+    return { requestId, reference, amount, previousBalance, newBalance };
+  });
+});
+
+/**
+ * Desk-recorded top-up: a funded client wired more money and told their
+ * account manager instead of filing a request. Creates the funding request
+ * already 'funded' so it carries a reference, appears on Transactions and
+ * prints an invoice - then credits wallet and ledger in the same commit.
+ */
+export const recordClientDeposit = onCall(async (request): Promise<CreditResult> => {
+  const adminUid = await requireFinanceAdmin(request);
+  const payload = (request.data ?? {}) as {
+    userId?: string;
+    userEmail?: string;
+    amount?: number;
+    note?: string;
+  };
+  const userId = String(payload.userId ?? '').trim();
+  if (!userId) throw new HttpsError('invalid-argument', 'userId is required');
+  const amount = normalizeCreditAmount(payload.amount);
+  const note = String(payload.note ?? '').trim();
+
+  const db = getFirestore();
+  const now = Timestamp.now();
+  const year = now.toDate().getFullYear();
+
+  return db.runTransaction(async (tx) => {
+    // Every read first - Firestore transaction rule.
+    const counterRef = db.collection(COUNTERS).doc(`funding-${year}`);
+    const counterSnap = await tx.get(counterRef);
+    const wallet = await walletRefFor(tx, db, userId);
+
+    const next = (counterSnap.exists ? Number(counterSnap.data()?.value ?? 0) : 0) + 1;
+    const reference = fundingReferenceFor(year, next);
+    const previousBalance = wallet.balance;
+    const newBalance = roundMoney(previousBalance + amount);
+    const requestRef = db.collection(FUNDING_REQUESTS).doc();
+    const adminEmail = String((request.auth?.token?.email as string | undefined) ?? '');
+
+    tx.set(counterRef, { value: next });
+    tx.set(requestRef, {
+      userId,
+      userEmail: payload.userEmail ?? '',
+      amount,
+      status: 'funded',
+      awaitingPayment: false,
+      reference,
+      source: 'admin',
+      ...(note ? { note } : {}),
+      recordedByUid: adminUid,
+      recordedByEmail: adminEmail,
+      createdAt: now,
+      approvedAt: now, // recording IS the approval; the invoice dates off this
+      fundedAt: now,
+      updatedAt: now,
+    });
+    writeWalletBalance(tx, wallet, userId, newBalance, now);
+    tx.set(db.collection(CASH_LEDGER).doc(), {
+      userId,
+      currency: 'USD',
+      entryType: 'deposit',
+      amount,
+      balanceAfter: newBalance,
+      referenceType: 'funding_request',
+      referenceId: requestRef.id,
+      description: note ? `Desk deposit - ${reference} (${note})` : `Desk deposit - ${reference}`,
+      postedBy: adminUid,
+      postedAt: now,
+    });
+
+    return { requestId: requestRef.id, reference, amount, previousBalance, newBalance };
+  });
+});
+
+/**
+ * Repair tool for deposits credited before the ledger fix: replays the missing
+ * 'deposit' entries for one client so their statement reconciles. Idempotent -
+ * a settled request that already has a ledger entry is skipped.
+ */
+export const backfillDepositLedger = onCall(async (request) => {
+  const adminUid = await requireFinanceAdmin(request);
+  const userId = String((request.data ?? {}).userId ?? '').trim();
+  if (!userId) throw new HttpsError('invalid-argument', 'userId is required');
+
+  const db = getFirestore();
+  const [fundingSnap, ledgerSnap, walletSnap] = await Promise.all([
+    db.collection(FUNDING_REQUESTS).where('userId', '==', userId).get(),
+    db.collection(CASH_LEDGER).where('userId', '==', userId).get(),
+    db.collection(WALLETS).where('userId', '==', userId).get(),
+  ]);
+  const walletDoc = walletSnap.docs[0];
+  if (!walletDoc) throw new HttpsError('failed-precondition', 'This investor has no wallet on file');
+
+  const alreadyPosted = new Set(
+    ledgerSnap.docs
+      .filter((d) => d.data().referenceType === 'funding_request')
+      .map((d) => String(d.data().referenceId)),
+  );
+
+  // Settled deposits, oldest first, so replayed balances climb in the order
+  // the money actually arrived.
+  const missing = fundingSnap.docs
+    .filter((d) => {
+      const f = d.data();
+      const settled = f.status === 'funded' || (f.status === 'approved' && f.awaitingPayment !== true);
+      return settled && !alreadyPosted.has(d.id);
+    })
+    .sort((a, b) => {
+      const at = (a.data().fundedAt ?? a.data().approvedAt ?? a.data().createdAt) as Timestamp | undefined;
+      const bt = (b.data().fundedAt ?? b.data().approvedAt ?? b.data().createdAt) as Timestamp | undefined;
+      return (at?.toMillis() ?? 0) - (bt?.toMillis() ?? 0);
+    });
+
+  if (missing.length === 0) return { posted: 0, entries: [] as string[] };
+
+  // Trade entries already carry correct running balances; replaying deposits
+  // beneath them would rewrite history. These are appended so that the ledger
+  // ENDS at the wallet's current balance - which is the number the statement's
+  // closing balance reads.
+  const currentBalance = Number(walletDoc.data().balance ?? 0);
+  const total = missing.reduce((sum, d) => sum + roundMoney(Number(d.data().amount ?? 0)), 0);
+  let running = roundMoney(currentBalance - total);
+
+  const batch = db.batch();
+  const entries: string[] = [];
+  const now = Timestamp.now();
+  for (const d of missing) {
+    const f = d.data();
+    const amount = roundMoney(Number(f.amount ?? 0));
+    running = roundMoney(running + amount);
+    batch.set(db.collection(CASH_LEDGER).doc(), {
+      userId,
+      currency: 'USD',
+      entryType: 'deposit',
+      amount,
+      balanceAfter: running,
+      referenceType: 'funding_request',
+      referenceId: d.id,
+      description: `Deposit received - ${String(f.reference ?? d.id)} (backfilled)`,
+      backfilled: true,
+      postedBy: adminUid,
+      postedAt: (f.fundedAt ?? f.approvedAt ?? now) as Timestamp,
+    });
+    entries.push(String(f.reference ?? d.id));
+  }
+  await batch.commit();
+  return { posted: missing.length, entries };
 });

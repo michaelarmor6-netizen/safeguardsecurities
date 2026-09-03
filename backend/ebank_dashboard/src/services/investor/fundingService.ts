@@ -3,7 +3,8 @@ import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { fundingReference } from './fundingDetailsService';
 import { db, storage } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
-import { creditWallet, ensureWalletRef } from './walletService';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../config/firebase';
 
 // Two-step lifecycle (2026-08-24): 'approved' now means "approved - funding
 // details sent to the client, awaiting their payment" (awaitingPayment=true);
@@ -243,18 +244,12 @@ export async function markFundingEmailSent(id: string) {
 // Step 2: finance confirms the money actually arrived - only now is the
 // wallet credited. Guard: only awaitingPayment rows are eligible (legacy
 // 'approved' rows were already credited at approval).
-export async function confirmFundingReceived(request: FundingRequest) {
+export async function confirmFundingReceived(request: FundingRequest): Promise<number> {
   if (request.status !== 'approved' || request.awaitingPayment !== true) {
     throw new Error('Only approved requests awaiting payment can be marked funded.');
   }
-  const { newBalance } = await creditWallet(request.userId, request.amount);
-  await updateDoc(doc(db, LIVE_COLLECTIONS.fundingRequests, request.id), {
-    status: 'funded',
-    awaitingPayment: false,
-    fundedAt: new Date(),
-    updatedAt: new Date(),
-  });
-  return newBalance;
+  const { data } = await confirmFundingReceiptFn({ requestId: request.id });
+  return data.newBalance;
 }
 
 // ---- admin-recorded funding (top-up) ----
@@ -265,22 +260,13 @@ export async function confirmFundingReceived(request: FundingRequest) {
 // client request -> approve -> confirm receipt, so the money either sat
 // uncredited or someone edited a balance out of band with no paper trail.
 //
-// This records the deposit the same way the normal flow ends up: a funding
-// request that is BORN 'funded', with its own SG-FUND reference, so it lands on
-// Transactions, exports in the finance CSV and prints an invoice/receipt like
-// any other deposit. `source: 'admin'` marks it as desk-recorded rather than
-// client-requested.
-//
-// Counter bump + request doc + wallet credit all commit in ONE transaction:
-// there is no window where the reference is burned but the money is not in, or
-// the wallet moved but nothing recorded it.
-//
-// No email fires: sendFundingDetailsOnApproval only triggers on pending ->
-// approved, and payment instructions would make no sense for money that has
-// already arrived.
-
-/** Sanity ceiling on a single manual credit - catches a slipped decimal point. */
-export const MAX_MANUAL_CREDIT = 10_000_000;
+// Both credit paths now run server-side (functions-trading), because the cash
+// ledger is `allow write: if false` - function-only by design, so it can stand
+// as the immutable record. A browser-side credit physically could not post to
+// it, which is how deposits came to be missing from the ledger the account
+// statement is built from. The callable writes wallet and ledger in one
+// transaction and is gated on a finance role, so support accounts can no
+// longer move money.
 
 export interface AddFundsInput {
   userId: string;
@@ -288,8 +274,6 @@ export interface AddFundsInput {
   amount: number;
   /** Finance memo: wire reference, "top-up per call 2026-08-31", etc. */
   note?: string;
-  adminUid: string;
-  adminEmail?: string;
 }
 
 export interface AddFundsResult {
@@ -300,55 +284,40 @@ export interface AddFundsResult {
   newBalance: number;
 }
 
+const confirmFundingReceiptFn = httpsCallable<{ requestId: string }, AddFundsResult>(
+  functions,
+  'confirmFundingReceipt',
+);
+
+const recordClientDepositFn = httpsCallable<AddFundsInput, AddFundsResult>(
+  functions,
+  'recordClientDeposit',
+);
+
+/** Replays ledger entries for deposits credited before the ledger fix. */
+const backfillDepositLedgerFn = httpsCallable<{ userId: string }, { posted: number; entries: string[] }>(
+  functions,
+  'backfillDepositLedger',
+);
+
 export async function addFundsToClient(input: AddFundsInput): Promise<AddFundsResult> {
   if (!input.userId) throw new Error('Pick a client first.');
-  if (!input.adminUid) throw new Error('Your admin session expired - sign in again.');
-  const amount = Math.round(Number(input.amount) * 100) / 100; // money, to the cent
+  // Server validates properly (and is the only thing that can be trusted to);
+  // this keeps the obvious mistake from costing a round trip.
+  const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new Error('Enter an amount greater than zero.');
   }
-  if (amount > MAX_MANUAL_CREDIT) {
-    throw new Error(`Single credits are capped at ${MAX_MANUAL_CREDIT.toLocaleString('en-US')} - split it or check the decimal point.`);
-  }
-
-  const now = new Date();
-  const year = now.getFullYear();
-  const counterRef = doc(db, 'counters', `funding-${year}`);
-  // Resolved before the transaction: the wallet is found by query, and a
-  // transaction can only read a known doc ref.
-  const walletRef = await ensureWalletRef(input.userId);
-  const requestRef = doc(collection(db, LIVE_COLLECTIONS.fundingRequests));
-
-  return runTransaction(db, async (tx) => {
-    // All reads before any write - Firestore transaction rule.
-    const counterSnap = await tx.get(counterRef);
-    const walletSnap = await tx.get(walletRef);
-    if (!walletSnap.exists()) throw new Error('Wallet no longer exists - reload and try again.');
-
-    const next = (counterSnap.exists() ? Number(counterSnap.data().value ?? 0) : 0) + 1;
-    const reference = `SG-FUND${String(year % 100).padStart(2, '0')}${String(next).padStart(5, '0')}`;
-    const previousBalance = Number(walletSnap.data().balance ?? 0);
-    const newBalance = previousBalance + amount;
-
-    tx.set(counterRef, { value: next });
-    tx.set(requestRef, {
-      userId: input.userId,
-      userEmail: input.userEmail ?? '',
-      amount,
-      status: 'funded',
-      awaitingPayment: false,
-      reference,
-      source: 'admin',
-      ...(input.note?.trim() ? { note: input.note.trim() } : {}),
-      recordedByUid: input.adminUid,
-      recordedByEmail: input.adminEmail ?? '',
-      createdAt: now,
-      approvedAt: now, // the invoice dates off this; recording IS the approval
-      fundedAt: now,
-      updatedAt: now,
-    });
-    tx.update(walletRef, { balance: newBalance, updatedAt: now });
-
-    return { requestId: requestRef.id, reference, amount, previousBalance, newBalance };
+  const { data } = await recordClientDepositFn({
+    userId: input.userId,
+    userEmail: input.userEmail,
+    amount,
+    note: input.note,
   });
+  return data;
+}
+
+export async function backfillDepositLedger(userId: string) {
+  const { data } = await backfillDepositLedgerFn({ userId });
+  return data;
 }

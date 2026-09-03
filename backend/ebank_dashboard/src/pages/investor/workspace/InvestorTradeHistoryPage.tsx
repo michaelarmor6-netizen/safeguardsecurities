@@ -111,8 +111,8 @@ export default function InvestorTradeHistoryPage() {
         </p>
       </form>
 
-      <div className="sg-panel overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
+        <table className="min-w-full text-sm sg-table-stack">
           <thead className="sg-text-muted">
             <tr>
               <th className="text-left p-4">Date &amp; Time</th>
@@ -126,15 +126,15 @@ export default function InvestorTradeHistoryPage() {
           <tbody>
             {orders.map((o) => (
               <tr key={o.id} className="border-t sg-row-border">
-                <td className="p-4 sg-text-muted whitespace-nowrap">
+                <td className="p-4 sg-text-muted whitespace-nowrap" data-label="Date">
                   {/* Fill time is the trade's real timestamp; fall back to when it was placed for orders not yet filled. */}
                   {(() => {
                     const ts = o.filledAt ?? o.createdAt;
                     return ts ? fmtDateTime(ts) : '—';
                   })()}
                 </td>
-                <td className="p-4 font-semibold sg-text-main">{o.symbol}</td>
-                <td className="p-4">
+                <td className="p-4 font-semibold sg-text-main" data-label="Symbol">{o.symbol}</td>
+                <td className="p-4" data-label="Side">
                   <span
                     className="text-xs font-semibold uppercase"
                     style={{ color: o.side === 'buy' ? 'var(--sg-teal)' : 'var(--sg-danger)' }}
@@ -142,9 +142,9 @@ export default function InvestorTradeHistoryPage() {
                     {o.side}
                   </span>
                 </td>
-                <td className="p-4 text-right sg-text-main">{o.quantity.toLocaleString()}</td>
-                <td className="p-4 text-right sg-text-main">{o.price != null ? fmt(o.price) : '—'}</td>
-                <td className="p-4">
+                <td className="p-4 text-right sg-text-main" data-label="Quantity">{o.quantity.toLocaleString()}</td>
+                <td className="p-4 text-right sg-text-main" data-label="Price">{o.price != null ? fmt(o.price) : '—'}</td>
+                <td className="p-4" data-label="Status">
                   <span className="text-xs font-semibold uppercase" style={{ color: statusColor[o.status] }}>
                     {o.status.replace('_', ' ')}
                   </span>

@@ -85,7 +85,7 @@ export default function InvestorAdminWalletsPage() {
         />
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <div className="sg-panel p-4">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Wallets</p>
           <p className="text-2xl font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{filtered.length}</p>
@@ -116,8 +116,8 @@ export default function InvestorAdminWalletsPage() {
         </div>
       </div>
 
-      <div className="sg-panel overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
+        <table className="min-w-full text-sm sg-table-stack">
           <thead className="sg-text-muted">
             <tr>
               <th className="text-left p-4">Client</th>
@@ -129,14 +129,14 @@ export default function InvestorAdminWalletsPage() {
           <tbody>
             {filtered.map((r) => (
               <tr key={r.wallet.id} className="border-t sg-row-border">
-                <td className="p-4">
+                <td className="p-4" data-label="Client">
                   <span className="block sg-text-main">{clientName(r.profile) || r.wallet.userId}</span>
                   <span className="block text-xs" style={{ color: 'var(--sg-muted-2)' }}>
                     {r.profile?.email ?? r.wallet.userId}
                   </span>
                 </td>
-                <td className="p-4 sg-text-muted">{r.wallet.label}</td>
-                <td className="p-4 font-semibold" style={{ color: r.wallet.balance > 0 ? 'var(--sg-teal)' : 'var(--sg-muted-2)' }}>
+                <td className="p-4 sg-text-muted" data-label="Label">{r.wallet.label}</td>
+                <td className="p-4 font-semibold" data-label="Balance" style={{ color: r.wallet.balance > 0 ? 'var(--sg-teal)' : 'var(--sg-muted-2)' }}>
                   {fmt(r.wallet.balance)}
                 </td>
                 <td className="p-4">

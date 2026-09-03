@@ -67,3 +67,6 @@ functions*/.env*
 functions*/lib
 *.tsbuildinfo
 .firebase/
+
+# Firebase emulator state exported by `npm run emulators`
+.emulator-data/
