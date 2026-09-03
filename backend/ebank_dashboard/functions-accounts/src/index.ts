@@ -228,6 +228,117 @@ export const createInvestorAccount = onCall(async (request) => {
 
 
 // ---------------------------------------------------------------------------
+// Staff account creation.
+//
+// createInvestorAccount above hardcodes role:'client', so until now the only
+// way to get a finance officer onto the platform was to create them as a
+// client and then promote them from the Users page. That works, but it leaves
+// a window where a staff hire exists as an ordinary client, and it hides the
+// act of granting privilege inside a table of dropdowns.
+//
+// Creating staff IS granting privilege, so this is gated on super-admin -
+// matching isSuperAdmin() in firestore.rules, which is what governs changing
+// somebody's role. A finance officer cannot mint another finance officer.
+
+/** Roles that may be created here. */
+const CREATABLE_STAFF_ROLES = ['support', 'finance', 'compliance', 'admin'] as const;
+type CreatableStaffRole = (typeof CREATABLE_STAFF_ROLES)[number];
+
+interface CreateStaffAccountData {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+}
+
+async function requireSuperAdmin(request: CallableRequest): Promise<string> {
+  const uid = requireAuth(request);
+  const snap = await getFirestore().doc(`profiles/${uid}`).get();
+  const role = snap.exists ? (snap.data()?.role as string | undefined) : undefined;
+  if (role !== 'admin' && role !== 'super_admin') {
+    throw new HttpsError('permission-denied', 'Only an administrator can create staff accounts.');
+  }
+  return uid;
+}
+
+export const createStaffAccount = onCall(async (request) => {
+  const actorUid = await requireSuperAdmin(request);
+
+  const data = (request.data ?? {}) as CreateStaffAccountData;
+  const email = String(data.email ?? '').trim().toLowerCase();
+  const firstName = String(data.firstName ?? '').trim();
+  const lastName = String(data.lastName ?? '').trim();
+  const role = String(data.role ?? '') as CreatableStaffRole;
+
+  if (!email) throw new HttpsError('invalid-argument', 'Email is required.');
+  if (!firstName) throw new HttpsError('invalid-argument', 'First name is required.');
+  if (!lastName) throw new HttpsError('invalid-argument', 'Last name is required.');
+
+  // super_admin is deliberately absent: that role is bootstrapped from the
+  // SUPER_ADMIN_EMAILS allowlist, and minting one from a form would make the
+  // allowlist meaningless. 'client' belongs to createInvestorAccount, which
+  // captures the onboarding record a client needs and this does not.
+  if (!CREATABLE_STAFF_ROLES.includes(role)) {
+    throw new HttpsError(
+      'invalid-argument',
+      `Role must be one of: ${CREATABLE_STAFF_ROLES.join(', ')}.`,
+    );
+  }
+
+  if (await emailInUse(email)) {
+    throw new HttpsError('already-exists', 'An account with this email already exists.');
+  }
+
+  const temporaryPassword = generateTemporaryPassword();
+
+  let userRecord;
+  try {
+    userRecord = await getAuth().createUser({ email, password: temporaryPassword, emailVerified: false });
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'auth/email-already-exists') {
+      throw new HttpsError('already-exists', 'An account with this email already exists.');
+    }
+    throw new HttpsError('internal', err instanceof Error ? err.message : 'Failed to create account');
+  }
+
+  const uid = userRecord.uid;
+  const now = FieldValue.serverTimestamp();
+
+  await getFirestore()
+    .doc(`profiles/${uid}`)
+    .set({
+      email,
+      role,
+      accountStatus: 'active',
+      firstName,
+      lastName,
+      displayName: `${firstName} ${lastName}`.trim(),
+      // Staff never go through the client onboarding flow; marking it complete
+      // keeps them out of the applicant queue and the onboarding redirect.
+      onboardingCompleted: true,
+      onboardingCompletedAt: now,
+      onboardingSource: 'admin',
+      isStaff: true,
+      createdBy: actorUid,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+  // Granting privilege is the single most audit-worthy act in the console.
+  await getFirestore().collection('auditLogs').add({
+    actorId: actorUid,
+    actorEmail: String(request.auth?.token?.email ?? ''),
+    action: 'Staff account created',
+    details: `${email} created with role '${role}'`,
+    createdAt: now,
+  });
+
+  return { uid, temporaryPassword, role };
+});
+
+
+// ---------------------------------------------------------------------------
 // Funding-details email: fires when an admin approves a funding request
 // (status pending -> approved with awaitingPayment=true, see
 // src/services/investor/fundingService.ts). Emails the client the deposit
