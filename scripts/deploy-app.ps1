@@ -6,7 +6,7 @@ if (-not $env:NODE_OPTIONS) {
 }
 
 $root = Split-Path $PSScriptRoot -Parent
-$appDir = Join-Path $root "backend\ebank_app"
+$appDir = Join-Path $root "backend\ebank_dashboard"
 $project = "e-bank-dashboard"
 
 Set-Location $appDir
@@ -25,11 +25,9 @@ Write-Host "[2/3] Building production bundle..." -ForegroundColor Cyan
 npm run build
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-Set-Location $root
-
 Write-Host ""
-Write-Host "[3/3] Deploying hosting:app to $project (e-bank-dashboard site)..." -ForegroundColor Cyan
-firebase deploy --only hosting:app --project $project
+Write-Host "[3/3] Deploying hosting to $project (e-bank-dashboard site)..." -ForegroundColor Cyan
+firebase deploy --only hosting --project $project
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Write-Host ""

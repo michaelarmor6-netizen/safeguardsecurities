@@ -1,6 +1,7 @@
 {
   "projects": {
-    "default": "e-bank-dashboard"
+    "default": "e-bank-dashboard",
+    "michaelarmor": "comex-safeguardsecurities"
   },
   "targets": {
     "e-bank-dashboard": {
