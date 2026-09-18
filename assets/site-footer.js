@@ -86,8 +86,14 @@
 
   function applyFooterContactColumn(column) {
     var items = column.querySelectorAll(".elementor-icon-list-items > .elementor-icon-list-item");
+    var phoneSeen = false;
     items.forEach(function (item) {
       if (iconInItem(item, "fa-phone")) {
+        if (phoneSeen) {
+          item.parentNode.removeChild(item);
+          return;
+        }
+        phoneSeen = true;
         setIconListText(item, contact.phoneDisplay || "");
         var telLink = item.querySelector('a[href^="tel:"]');
         if (telLink && contact.phoneTel) {
@@ -183,7 +189,9 @@
       });
     }
     if (contact.phoneTel) {
-      document.querySelectorAll('a[href^="tel:+12163407164"], a[href^="tel:216"]').forEach(function (a) {
+      document.querySelectorAll(
+        'a[href^="tel:+12163407164"], a[href^="tel:+12162507891"], a[href^="tel:216"], a[href^="tel:+19379821491"]'
+      ).forEach(function (a) {
         a.setAttribute("href", "tel:" + contact.phoneTel);
       });
     }

@@ -7,8 +7,8 @@
 
   global.SG_SITE_CONFIG = {
     contact: {
-      phoneDisplay: "+1  216 2507891",
-      phoneTel: "+1 216 2507891",
+      phoneDisplay: "+1 937 982 1491",
+      phoneTel: "+19379821491",
       email: "info@safeguardsecurities.us",
       address: "6060 Parkland Boulevard, Suite 200, Mayfield Heights, OH 44124",
     },
