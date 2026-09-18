@@ -162,7 +162,10 @@
 
         if (!additionalPhone) {
           additionalPhone = primaryPhone.cloneNode(true);
-          primaryPhone.parentNode.appendChild(additionalPhone);
+          primaryPhone.parentNode.insertBefore(
+            additionalPhone,
+            primaryPhone.nextSibling
+          );
         }
 
         setIconListText(

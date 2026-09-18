@@ -1,15 +1,16 @@
 {
   "projects": {
-    "default": "comex-safeguardsecurities"
+    "default": "e-bank-dashboard",
+    "michaelarmor": "comex-safeguardsecurities"
   },
   "targets": {
-    "comex-safeguardsecurities": {
+    "e-bank-dashboard": {
       "hosting": {
         "marketing": [
-          "comex-safeguardsecurities"
+          "safeguard-marketing"
         ],
-        "client-portal": [
-          "comex-safeguardsecurities"
+        "app": [
+          "e-bank-dashboard"
         ]
       }
     }
