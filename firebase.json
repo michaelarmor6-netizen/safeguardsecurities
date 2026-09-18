@@ -196,62 +196,6 @@
           ]
         }
       ]
-    },
-    {
-      "target": "client-portal",
-      "public": ".",
-      "only": [
-        "login.html",
-        "register.html",
-        "dashboard.html",
-        "admin.html",
-        "firebase-init.js",
-        "assets/favicon/**",
-        "assets/site-chrome.css",
-        "assets/site-config.js",
-        "assets/site-footer.js",
-        "assets/elementor-local-fix.js",
-        "wp-content/themes/hello-elementor/style.min-ver=2.5.0.css",
-        "wp-content/uploads/sites/12/2022/02/logo2.png"
-      ],
-      "cleanUrls": true,
-      "trailingSlash": false,
-      "rewrites": [
-        {
-          "source": "/signin",
-          "destination": "/login.html"
-        },
-        {
-          "source": "/admin",
-          "destination": "/admin.html"
-        },
-        {
-          "source": "/dashboard",
-          "destination": "/dashboard.html"
-        },
-        {
-          "source": "/register",
-          "destination": "/register.html"
-        }
-      ],
-      "headers": [
-        {
-          "source": "**",
-          "headers": [
-            {
-              "key": "Cache-Control",
-              "value": "no-cache, no-store, must-revalidate"
-            }
-          ]
-        }
-      ],
-      "redirects": [
-        {
-          "source": "/login",
-          "destination": "/signin",
-          "type": 301
-        }
-      ]
     }
   ]
 }
