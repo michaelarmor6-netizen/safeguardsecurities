@@ -4,6 +4,7 @@ export const LIVE_COLLECTIONS = {
   watchlists: 'watchlists',
   portfolioHoldings: 'portfolioHoldings',
   fundingRequests: 'fundingRequests',
+  invoices: 'invoices',
   orders: 'adminOrders',
   priceAlerts: 'priceAlerts',
   trades: 'trades',

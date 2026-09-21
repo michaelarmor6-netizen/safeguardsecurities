@@ -31,3 +31,12 @@ export function isInvestorRole(value: string): value is InvestorRole {
 export function isInvestorAdmin(role: InvestorRole): boolean {
   return role !== 'client';
 }
+
+export function isFinanceRole(role: InvestorRole): boolean {
+  return role === 'finance' || role === 'admin' || role === 'super_admin';
+}
+
+/** Desk admins (not finance/support/compliance) — client P/L and trade books. */
+export function isPlatformAdmin(role: InvestorRole): boolean {
+  return role === 'admin' || role === 'super_admin';
+}

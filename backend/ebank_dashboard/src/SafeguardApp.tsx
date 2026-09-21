@@ -24,6 +24,10 @@ import InvestorPlanPage from './pages/investor/workspace/InvestorPlanPage';
 import InvestorTradeDeskPage from './pages/investor/tradedesk/InvestorTradeDeskPage';
 import FundingInvoicePage from './pages/investor/FundingInvoicePage';
 import FundingEmailPreviewPage from './pages/investor/FundingEmailPreviewPage';
+import StaffInvoicePage from './pages/investor/StaffInvoicePage';
+import InvoiceEmailPreviewPage from './pages/investor/InvoiceEmailPreviewPage';
+import InvestorInvoicesPage from './pages/investor/workspace/InvestorInvoicesPage';
+import InvestorAdminInvoicesPage from './pages/investor/admin/InvestorAdminInvoicesPage';
 import InvestorNewsPage from './pages/investor/workspace/InvestorNewsPage';
 import InvestorResearchPage from './pages/investor/workspace/InvestorResearchPage';
 import InvestorWatchlistPage from './pages/investor/workspace/InvestorWatchlistPage';
@@ -86,6 +90,8 @@ function SafeguardRoutes() {
       <Route path="/trade-desk" element={<InvestorTradeDeskPage />} />
       <Route path="/funding-invoice/:requestId" element={<FundingInvoicePage />} />
       <Route path="/funding-email/:requestId" element={<FundingEmailPreviewPage />} />
+      <Route path="/invoice/:invoiceId" element={<StaffInvoicePage />} />
+      <Route path="/invoice-email/:invoiceId" element={<InvoiceEmailPreviewPage />} />
       <Route path="/workspace" element={<InvestorWorkspaceLayout />}>
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<InvestorDashboardPage />} />
@@ -94,6 +100,7 @@ function SafeguardRoutes() {
         <Route path="wallet" element={<InvestorWalletPage />} />
         <Route path="performance" element={<InvestorPerformancePage />} />
         <Route path="statement" element={<InvestorStatementPage />} />
+        <Route path="invoices" element={<InvestorInvoicesPage />} />
         <Route path="ai-insights" element={<InvestorAiInsightsPage />} />
         <Route path="ai-engine" element={<InvestorAiEnginePage />} />
         <Route path="kyc" element={<InvestorKycPage />} />
@@ -122,6 +129,7 @@ function SafeguardRoutes() {
         <Route path="wallet-setup" element={<InvestorAdminWalletSetupPage />} />
         <Route path="wallets" element={<InvestorAdminWalletsPage />} />
         <Route path="funding" element={<InvestorAdminFundingPage />} />
+        <Route path="invoices" element={<InvestorAdminInvoicesPage />} />
         <Route path="transactions" element={<InvestorAdminTransactionsPage />} />
         <Route path="email-templates" element={<InvestorAdminEmailTemplatePage />} />
         <Route path="assets" element={<InvestorAdminAssetsPage />} />

@@ -5,6 +5,12 @@ import type { InvestorProfile } from '../../../../services/investor/profileServi
 import { getUserWallet } from '../../../../services/investor/walletService';
 import { backfillDepositLedger, getFundingRequestsForUser, requestReference, type FundingRequest } from '../../../../services/investor/fundingService';
 import { getKycSubmissionsForUser, type KycSubmission } from '../../../../services/investor/kycService';
+import { getUserPortfolio, getPortfolioStatsForUser, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
+import { getPortfolioHistory, type PortfolioSnapshot } from '../../../../services/investor/portfolioHistoryService';
+import { getTradesForUser, type Trade } from '../../../../services/investor/tradesService';
+import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
+import { isPlatformAdmin } from '../../../../lib/investorRoles';
+import PortfolioMiniChart from '../../../../components/investor/PortfolioMiniChart';
 
 // Everything the desk knows about one client, in one place. The Users table
 // answers "who exists and what are they set to"; this answers "who IS this
@@ -70,9 +76,15 @@ export interface ClientDetailsDrawerProps {
 }
 
 export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsDrawerProps) {
+  const { profile: viewer } = useInvestorAuth();
+  const canViewBook = viewer ? isPlatformAdmin(viewer.role) : false;
   const [balance, setBalance] = useState<number | null>(null);
   const [requests, setRequests] = useState<FundingRequest[]>([]);
   const [kyc, setKyc] = useState<KycSubmission[]>([]);
+  const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
+  const [stats, setStats] = useState<PortfolioStats | null>(null);
+  const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
   const [repairing, setRepairing] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -94,20 +106,36 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
     setLoading(true);
     // Money and KYC are separate collections - a client with no wallet or no
     // submission is normal, so a failure on one must not blank the whole panel.
-    Promise.allSettled([
+    const jobs: Promise<unknown>[] = [
       getUserWallet(profile.id),
       getFundingRequestsForUser(profile.id),
       getKycSubmissionsForUser(profile.id),
-    ])
-      .then(([w, f, k]) => {
+    ];
+    if (canViewBook) {
+      jobs.push(
+        getUserPortfolio(profile.id),
+        getPortfolioStatsForUser(profile.id),
+        getPortfolioHistory(profile.id),
+        getTradesForUser(profile.id),
+      );
+    }
+    Promise.allSettled(jobs)
+      .then((results) => {
         if (cancelled) return;
-        setBalance(w.status === 'fulfilled' ? (w.value?.balance ?? 0) : null);
-        setRequests(f.status === 'fulfilled' ? f.value : []);
-        setKyc(k.status === 'fulfilled' ? k.value : []);
+        const [w, f, k, p, s, h, t] = results;
+        setBalance(w.status === 'fulfilled' ? ((w.value as { balance?: number } | null)?.balance ?? 0) : null);
+        setRequests(f.status === 'fulfilled' ? (f.value as FundingRequest[]) : []);
+        setKyc(k.status === 'fulfilled' ? (k.value as KycSubmission[]) : []);
+        if (canViewBook) {
+          setHoldings(p?.status === 'fulfilled' ? (p.value as PortfolioHolding[]) : []);
+          setStats(s?.status === 'fulfilled' ? (s.value as PortfolioStats) : null);
+          setHistory(h?.status === 'fulfilled' ? (h.value as PortfolioSnapshot[]) : []);
+          setTrades(t?.status === 'fulfilled' ? (t.value as Trade[]) : []);
+        }
       })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [profile.id, reloadKey]);
+  }, [profile.id, reloadKey, canViewBook]);
 
   // Deposits credited before the ledger fix never posted a cashLedger entry,
   // so this client's statement has no closing balance (or a stale one). This
@@ -198,9 +226,9 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
         </div>
 
         {/* Money first - it is what the desk opens this panel for. */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <div className={`grid gap-2 sm:gap-3 ${canViewBook ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-3'}`}>
           <div className="p-3 rounded-xl" style={tileStyle}>
-            <p className="text-[11px] uppercase" style={{ color: 'var(--sg-muted-2)' }}>Wallet balance</p>
+            <p className="text-[11px] uppercase" style={{ color: 'var(--sg-muted-2)' }}>Wallet (cash)</p>
             <p className="text-base sm:text-lg font-semibold mt-0.5" style={{ color: 'var(--sg-teal)' }}>
               {loading ? '…' : balance === null ? '—' : fmtMoney(balance)}
             </p>
@@ -215,6 +243,33 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
               {loading ? '…' : open.length}
             </p>
           </div>
+          {canViewBook && (
+            <>
+              <div className="p-3 rounded-xl" style={tileStyle}>
+                <p className="text-[11px] uppercase" style={{ color: 'var(--sg-muted-2)' }}>Portfolio value</p>
+                <p className="text-base sm:text-lg font-semibold mt-0.5 sg-text-main">
+                  {loading ? '…' : fmtMoney(stats?.totalValue ?? 0)}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl" style={tileStyle}>
+                <p className="text-[11px] uppercase" style={{ color: 'var(--sg-muted-2)' }}>Cash + portfolio</p>
+                <p className="text-base sm:text-lg font-semibold mt-0.5" style={{ color: 'var(--sg-indigo)' }}>
+                  {loading || balance === null ? '…' : fmtMoney((balance ?? 0) + (stats?.totalValue ?? 0))}
+                </p>
+              </div>
+              <div className="p-3 rounded-xl" style={tileStyle}>
+                <p className="text-[11px] uppercase" style={{ color: 'var(--sg-muted-2)' }}>Unrealized P/L</p>
+                <p
+                  className="text-base sm:text-lg font-semibold mt-0.5"
+                  style={{ color: (stats?.totalGain ?? 0) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}
+                >
+                  {loading || !stats
+                    ? '…'
+                    : `${fmtMoney(stats.totalGain)} (${stats.totalGainPercent >= 0 ? '+' : ''}${stats.totalGainPercent.toFixed(2)}%)`}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Deposits credited before the ledger fix left no cashLedger entry, so
@@ -326,6 +381,126 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
           <Field label="Email" value={profile.accountManager?.email} />
           <Field label="Phone" value={profile.accountManager?.phone} />
         </Section>
+
+        {canViewBook && (
+          <>
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-teal)' }}>
+                Portfolio performance
+              </h3>
+              {loading ? (
+                <p className="text-sm sg-text-muted">Loading…</p>
+              ) : (
+                <div className="p-3 rounded-xl" style={tileStyle}>
+                  <div className="flex flex-wrap gap-4 text-xs mb-2" style={{ color: 'var(--sg-muted)' }}>
+                    <span>Holdings: {stats?.holdingsCount ?? 0}</span>
+                    <span>
+                      Today:{' '}
+                      <span style={{ color: (stats?.dayChange ?? 0) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>
+                        {fmtMoney(stats?.dayChange ?? 0)} ({(stats?.dayChangePercent ?? 0) >= 0 ? '+' : ''}
+                        {(stats?.dayChangePercent ?? 0).toFixed(2)}%)
+                      </span>
+                    </span>
+                    {history.length > 0 && (
+                      <span>History as of {history[history.length - 1].date}</span>
+                    )}
+                  </div>
+                  {history.length >= 2 ? (
+                    <PortfolioMiniChart values={history.slice(-90).map((h) => h.totalValue)} />
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--sg-muted-2)' }}>No snapshot history yet.</p>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-teal)' }}>
+                Current holdings
+              </h3>
+              {loading ? (
+                <p className="text-sm sg-text-muted">Loading…</p>
+              ) : holdings.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--sg-muted-2)' }}>No open positions.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead style={{ color: 'var(--sg-muted-2)' }}>
+                      <tr>
+                        <th className="text-left py-1.5 pr-3">Symbol</th>
+                        <th className="text-right py-1.5 pr-3">Qty</th>
+                        <th className="text-right py-1.5 pr-3">Avg cost</th>
+                        <th className="text-right py-1.5 pr-3">Mark</th>
+                        <th className="text-right py-1.5">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {holdings.map((h) => (
+                        <tr key={h.id} className="border-t sg-row-border">
+                          <td className="py-1.5 pr-3">
+                            <div className="sg-text-main font-medium">{h.symbol}</div>
+                            <div style={{ color: 'var(--sg-muted-2)' }}>{h.name}</div>
+                          </td>
+                          <td className="py-1.5 pr-3 text-right">{h.shares}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(h.averagePrice)}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(h.price)}</td>
+                          <td className="py-1.5 text-right sg-text-main">{fmtMoney(h.value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-teal)' }}>
+                Trade details
+              </h3>
+              {loading ? (
+                <p className="text-sm sg-text-muted">Loading…</p>
+              ) : trades.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--sg-muted-2)' }}>No executed trades.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-xs">
+                    <thead style={{ color: 'var(--sg-muted-2)' }}>
+                      <tr>
+                        <th className="text-left py-1.5 pr-3">When</th>
+                        <th className="text-left py-1.5 pr-3">Ref</th>
+                        <th className="text-left py-1.5 pr-3">Side</th>
+                        <th className="text-left py-1.5 pr-3">Symbol</th>
+                        <th className="text-right py-1.5 pr-3">Qty</th>
+                        <th className="text-right py-1.5 pr-3">Price</th>
+                        <th className="text-right py-1.5">Gross</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {trades.slice(0, 20).map((t) => (
+                        <tr key={t.id} className="border-t sg-row-border">
+                          <td className="py-1.5 pr-3 whitespace-nowrap" style={{ color: 'var(--sg-muted-2)' }}>
+                            {t.executedAt ? t.executedAt.toLocaleString() : '—'}
+                          </td>
+                          <td className="py-1.5 pr-3 font-mono">{t.tradeRef || t.id.slice(0, 8)}</td>
+                          <td className="py-1.5 pr-3 uppercase">{t.side}</td>
+                          <td className="py-1.5 pr-3">{t.symbol}</td>
+                          <td className="py-1.5 pr-3 text-right">{t.quantity}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(t.price)}</td>
+                          <td className="py-1.5 text-right">{fmtMoney(t.grossAmount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {trades.length > 20 && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--sg-muted-2)' }}>
+                      Showing the 20 most recent of {trades.length}.
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+          </>
+        )}
 
         <section className="space-y-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-teal)' }}>

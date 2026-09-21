@@ -24,6 +24,7 @@ import {
   FileUp,
   Send,
   Mail,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
@@ -37,6 +38,7 @@ const nav = [
   { to: '/admin/wallet-setup', label: 'Wallet Setup', icon: Wrench },
   { to: '/admin/wallets', label: 'Wallets', icon: Wallet },
   { to: '/admin/funding', label: 'Funding Requests', icon: Banknote },
+  { to: '/admin/invoices', label: 'Invoices', icon: FileSpreadsheet },
   { to: '/admin/transactions', label: 'Transactions', icon: Receipt },
   { to: '/admin/assets', label: 'Asset Management', icon: Package },
   { to: '/admin/support', label: 'Support Tickets', icon: LifeBuoy },

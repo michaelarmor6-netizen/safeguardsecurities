@@ -42,6 +42,7 @@ const mainNav = [
   { to: '/workspace/wallet', label: 'Wallet', icon: Wallet },
   { to: '/workspace/performance', label: 'Performance', icon: TrendingUp },
   { to: '/workspace/statement', label: 'Statement', icon: FileText },
+  { to: '/workspace/invoices', label: 'Invoices', icon: FileText },
   { to: '/workspace/ai-insights', label: 'AI Insights', icon: Sparkles },
   { to: '/workspace/ai-engine', label: 'AI Engine', icon: Bot, badge: 'NEW' },
   { to: '/workspace/plan', label: 'Subscription', icon: Layers },

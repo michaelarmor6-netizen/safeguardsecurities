@@ -199,6 +199,18 @@ service cloud.firestore {
     // staff no longer create funding rows from the browser at all.
     // Approving, rejecting and emailing are FINANCE decisions - a support agent
     // must not be able to move a request toward a payout.
+    // Finance invoices: staff create official billed documents; clients may
+    // read invoices issued to their uid. Create/update (issue, mark sent/paid,
+    // void) is a finance act. Invoice numbers come from counters/invoices-{YYYY}.
+    match /invoices/{invoiceId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if isFinance() &&
+        request.resource.data.createdByUid == request.auth.uid;
+      allow update: if isFinance();
+      allow delete: if isSuperAdmin();
+    }
+
     match /fundingRequests/{requestId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());

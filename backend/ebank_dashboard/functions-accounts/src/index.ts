@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { onCall, HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { defineSecret, defineString } from 'firebase-functions/params';
 
 initializeApp();
@@ -611,6 +611,158 @@ export const sendFundingDetailsOnApproval = onDocumentUpdated(
         return;
       }
       await stamp({ emailSentAt: FieldValue.serverTimestamp(), emailError: FieldValue.delete() });
+    } catch (err) {
+      await stamp({ emailError: err instanceof Error ? err.message.slice(0, 300) : 'Send failed' });
+    }
+  },
+);
+
+// Official finance invoices: when finance issues a document with sendMode=auto,
+// email it via the same Resend mailbox as funding instructions. Manual invoices
+// skip this trigger so staff can compose in Thunderbird / Outlook.
+export const sendInvoiceOnCreate = onDocumentCreated(
+  { document: 'invoices/{invoiceId}', secrets: [RESEND_API_KEY] },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) return;
+    if (String(data.sendMode ?? '') !== 'auto') return;
+    if (String(data.status ?? '') === 'void') return;
+
+    const invoiceRef = event.data!.ref;
+    const stamp = (fields: Record<string, unknown>) =>
+      invoiceRef.update({ ...fields, updatedAt: FieldValue.serverTimestamp() }).catch(() => undefined);
+
+    const to = String(data.billToEmail ?? '').trim();
+    if (!to || !to.includes('@')) {
+      await stamp({ emailError: 'No bill-to email on the invoice' });
+      return;
+    }
+    const apiKey = RESEND_API_KEY.value().trim();
+    if (!apiKey) {
+      await stamp({ emailError: 'Email not configured (RESEND_API_KEY empty)' });
+      return;
+    }
+
+    const db = getFirestore();
+    const [detailsSnap, settingsSnap] = await Promise.all([
+      db.doc('platformSettings/fundingDetails').get(),
+      db.doc('platformSettings/global').get(),
+    ]);
+    const d = detailsSnap.exists ? detailsSnap.data() ?? {} : {};
+    const platformName = String(settingsSnap.data()?.platformName ?? 'SafeGuard Securities');
+    const number = String(data.number ?? event.params.invoiceId);
+    const currency = String(data.currency ?? 'USD');
+    const items: Array<{ description?: string; quantity?: number; unitPrice?: number }> =
+      Array.isArray(data.lineItems) ? data.lineItems : [];
+    const taxRate = Number(data.taxRate ?? 0);
+    const subtotal = items.reduce((s, i) => s + Number(i.quantity ?? 0) * Number(i.unitPrice ?? 0), 0);
+    const tax = subtotal * taxRate / 100;
+    const money = (n: number) =>
+      new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(n);
+    const issued = data.issuedAt?.toDate?.()
+      ? (data.issuedAt.toDate() as Date).toLocaleString('en-US', {
+          dateStyle: 'long',
+          timeStyle: 'short',
+          timeZone: 'America/New_York',
+        })
+      : '';
+    const logoUrl = 'https://app.safeguardsecurities.us/logo-email.png';
+    const sealUrl = 'https://app.safeguardsecurities.us/seal-official.svg';
+    const portalUrl = `https://app.safeguardsecurities.us/invoice/${event.params.invoiceId}`;
+    const name = String(data.billToName ?? to);
+
+    const itemRows = items.map((i) => {
+      const amt = Number(i.quantity ?? 0) * Number(i.unitPrice ?? 0);
+      return `<tr>
+        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;">${esc(i.description)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;text-align:right;">${esc(i.quantity)}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;text-align:right;">${esc(money(amt))}</td>
+      </tr>`;
+    }).join('');
+
+    let pay = '';
+    if (data.includePaymentInstructions === true && d.bankEnabled === true) {
+      const reasonBase = String(d.paymentReason ?? '').trim();
+      const reason = reasonBase ? `${reasonBase} — ${number}` : number;
+      const rows: Array<[string, unknown]> = [
+        ['Bank name', d.bankName], ['Bank address', d.bankAddress],
+        ['Bank ID / SWIFT code', d.bankSwift], ['Beneficiary account', d.bankAccountName],
+        ['Beneficiary account no.', d.bankAccountNumber], ['Beneficiary address', d.beneficiaryAddress],
+        ['Routing / IBAN', d.bankRoutingOrIban], ['Reason for payment', reason],
+      ];
+      pay = `<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f0;border:1px solid #dddddd;margin:24px 0;"><tr><td style="padding:18px;">
+        <div style="font-size:13px;font-weight:700;color:#003d82;text-transform:uppercase;">Payment instructions</div>
+        <table width="100%">${rows.filter(([, v]) => v).map(([l, v]) =>
+          `<tr><td style="padding:6px 12px 6px 0;color:#003d82;font-weight:700;font-size:13px;">${esc(l)}</td><td style="padding:6px 0;font-family:'Courier New',monospace;font-size:13px;color:#003d82;">${esc(v)}</td></tr>`
+        ).join('')}</table></td></tr></table>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head>
+<body style="margin:0;background:#f5f5f5;">
+<table width="100%"><tr><td align="center" style="padding:20px 10px;">
+<table width="600" style="max-width:600px;width:100%;background:#fff;font-family:Arial,Helvetica,sans-serif;">
+  <tr><td style="padding:26px 30px;border-bottom:1px solid #e5e7eb;">
+    <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="48" style="height:48px;width:auto;border:0;" />
+  </td></tr>
+  <tr><td style="padding:36px 30px;color:#003d82;">
+    <div style="font-size:18px;font-weight:600;">Invoice ${esc(number)}</div>
+    <p style="font-size:14px;line-height:1.7;">Hello ${esc(name)}, please find your official ${esc(platformName)} invoice.
+    This document is time-stamped and bears the firm digital seal.</p>
+    <p style="font-size:13px;color:#5b6472;">Issued: ${esc(issued)}</p>
+    <table width="100%">${itemRows}
+      <tr><td colspan="2" style="padding-top:12px;text-align:right;color:#5b6472;">Subtotal</td><td style="padding-top:12px;text-align:right;font-weight:600;">${esc(money(subtotal))}</td></tr>
+      ${taxRate > 0 ? `<tr><td colspan="2" style="padding-top:4px;text-align:right;color:#5b6472;">${esc(data.taxLabel ?? 'Tax')} (${esc(taxRate)}%)</td><td style="padding-top:4px;text-align:right;">${esc(money(tax))}</td></tr>` : ''}
+      <tr><td colspan="2" style="padding-top:8px;text-align:right;font-weight:700;">Total due</td><td style="padding-top:8px;text-align:right;font-size:20px;font-weight:800;">${esc(money(subtotal + tax))}</td></tr>
+    </table>
+    ${pay}
+    ${data.notes ? `<p style="font-size:13px;white-space:pre-wrap;">${esc(data.notes)}</p>` : ''}
+    <div style="text-align:center;padding:20px 0 8px;">
+      <a href="${esc(portalUrl)}" style="display:inline-block;background:#003d82;color:#fff;padding:12px 32px;text-decoration:none;border-radius:4px;font-weight:600;">View invoice in portal</a>
+    </div>
+    <div style="text-align:center;margin-top:12px;">
+      <img src="${esc(sealUrl)}" alt="Official digital seal" width="96" height="96" style="width:96px;height:96px;" />
+      <div style="font-size:10px;color:#5b6472;letter-spacing:.08em;text-transform:uppercase;">Official digital seal</div>
+    </div>
+  </td></tr>
+  <tr><td align="center" style="background:#f0f0f0;padding:24px;font-size:11px;color:#666;">
+    <img src="${esc(logoUrl)}" alt="" height="32" /><br/>
+    ${esc(platformName)} · Confidential invoice · Electronically issued and sealed
+  </td></tr>
+</table></td></tr></table></body></html>`;
+
+    const text = [
+      `Invoice ${number}`,
+      `Issued: ${issued}`,
+      `Amount due: ${money(subtotal + tax)}`,
+      '',
+      `Billed to: ${name}`,
+      ...items.map((i) => `  ${i.description}  ${i.quantity} × ${money(Number(i.unitPrice ?? 0))}`),
+      '',
+      platformName,
+    ].join('\n');
+
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: MAIL_FROM.value(),
+          to: [to],
+          subject: `${platformName} — Invoice ${number}`,
+          text,
+          html,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 300);
+        await stamp({ emailError: `Resend ${res.status}: ${body}` });
+        return;
+      }
+      await stamp({
+        emailSentAt: FieldValue.serverTimestamp(),
+        emailError: FieldValue.delete(),
+        status: 'sent',
+      });
     } catch (err) {
       await stamp({ emailError: err instanceof Error ? err.message.slice(0, 300) : 'Send failed' });
     }
