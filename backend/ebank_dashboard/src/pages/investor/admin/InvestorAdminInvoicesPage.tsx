@@ -12,6 +12,7 @@ import {
   getAllInvoices,
   invoiceTotal,
   markInvoicePaid,
+  sendInvoiceEmail,
   voidInvoice,
   type InvoiceLineItem,
   type InvoiceSendMode,
@@ -130,7 +131,16 @@ export default function InvestorAdminInvoicesPage() {
         createdByEmail: profile?.email ?? user.email ?? '',
       });
       await logAction(user.uid, profile?.email ?? '', 'Invoice issued', `${billToEmail} ${sendMode}`);
-      toast.success(sendMode === 'auto' ? 'Invoice issued — sending via configured email' : 'Invoice issued — send it manually when ready');
+      if (sendMode === 'auto') {
+        try {
+          await sendInvoiceEmail(id);
+          toast.success('Invoice issued and emailed');
+        } catch (mailErr) {
+          toast.error(mailErr instanceof Error ? mailErr.message : 'Invoice saved, but email failed');
+        }
+      } else {
+        toast.success('Invoice issued — send it manually when ready');
+      }
       resetForm();
       setCreating(false);
       load();
@@ -345,13 +355,35 @@ export default function InvestorAdminInvoicesPage() {
                     : inv.emailError
                       ? inv.emailError
                       : inv.sendMode === 'auto'
-                        ? 'Sending…'
+                        ? 'Not sent'
                         : 'Manual'}
                 </td>
                 <td className="p-3 text-right space-x-2 whitespace-nowrap">
                   <button type="button" className="sg-action-btn text-xs" onClick={() => navigate(`/invoice/${inv.id}`)}>View</button>
+                  {canWrite && !inv.emailSentAt && inv.status !== 'void' && (
+                    <button
+                      type="button"
+                      className="sg-action-btn text-xs"
+                      disabled={busyId === inv.id}
+                      onClick={async () => {
+                        setBusyId(inv.id);
+                        try {
+                          await sendInvoiceEmail(inv.id);
+                          if (user) logAction(user.uid, profile?.email ?? '', 'Invoice emailed', inv.number);
+                          toast.success('Invoice emailed');
+                          load();
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'Send failed');
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
+                    >
+                      Send
+                    </button>
+                  )}
                   {canWrite && (
-                    <button type="button" className="sg-action-btn text-xs" onClick={() => navigate(`/invoice-email/${inv.id}`)}>Email</button>
+                    <button type="button" className="sg-action-btn text-xs" onClick={() => navigate(`/invoice-email/${inv.id}`)}>Manual</button>
                   )}
                   {canWrite && inv.status !== 'paid' && inv.status !== 'void' && (
                     <button

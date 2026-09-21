@@ -11,7 +11,7 @@ import {
   where,
   type DocumentData,
 } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 
 export type InvoiceStatus = 'issued' | 'sent' | 'paid' | 'void';
@@ -216,6 +216,28 @@ export async function voidInvoice(id: string) {
     status: 'void',
     updatedAt: new Date(),
   });
+}
+
+const INVOICE_MAIL_URL =
+  (import.meta.env.VITE_INVOICE_MAIL_URL as string | undefined)?.trim() ||
+  'https://safeguard-invoice-mail.sgfintechllc.workers.dev';
+
+export async function sendInvoiceEmail(invoiceId: string): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in required');
+  const token = await user.getIdToken();
+  const res = await fetch(INVOICE_MAIL_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ invoiceId }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(typeof data.error === 'string' ? data.error : `Send failed (${res.status})`);
+  }
 }
 
 export function formatAddress(parts: {

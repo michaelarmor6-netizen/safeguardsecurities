@@ -1,0 +1,13 @@
+{
+  "name": "safeguard-invoice-mail",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-21",
+  "workers_dev": true,
+  "vars": {
+    "FIREBASE_PROJECT_ID": "e-bank-dashboard",
+    "FIREBASE_API_KEY": "AIzaSyCbAQrQEyETkBw_1nMlDwEnkn4jqt1uPpo",
+    "MAIL_FROM": "SafeGuard Securities <info@safeguardsecurities.us>",
+    "PUBLIC_APP_URL": "https://app.safeguardsecurities.us",
+    "ALLOWED_ORIGINS": "https://app.safeguardsecurities.us,https://e-bank-dashboard.web.app,http://localhost:5173"
+  }
+}

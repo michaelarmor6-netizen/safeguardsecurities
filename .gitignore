@@ -19,6 +19,8 @@ mobile/android/local.properties
 backend/node_modules/
 scripts/node_modules/
 voice-worker/node_modules/
+invoice-worker/node_modules/
+invoice-worker/.wrangler/
 # --- backend/ebank_dashboard (added 2026-08-25, first commit of the app) ---
 backend/ebank_dashboard/node_modules/
 backend/ebank_dashboard/*/node_modules/
