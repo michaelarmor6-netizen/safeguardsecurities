@@ -37,6 +37,11 @@ export interface PlatformSettings {
   // Email Templates
   welcomeEmailSubjectOverride: string;
   welcomeEmailIntroOverride: string;
+
+  // Invoice numbering (e.g. SG-INV2600001)
+  invoicePrefix: string;
+  invoiceIncludeYear: boolean;
+  invoicePadLength: number;
 }
 
 export const DEFAULTS: PlatformSettings = {
@@ -65,6 +70,10 @@ export const DEFAULTS: PlatformSettings = {
 
   welcomeEmailSubjectOverride: '',
   welcomeEmailIntroOverride: '',
+
+  invoicePrefix: 'SG-INV',
+  invoiceIncludeYear: true,
+  invoicePadLength: 5,
 };
 
 export async function getPlatformSettings(): Promise<PlatformSettings> {
@@ -91,6 +100,9 @@ export async function getPlatformSettings(): Promise<PlatformSettings> {
     minPasswordLength: Number(data.minPasswordLength ?? DEFAULTS.minPasswordLength),
     welcomeEmailSubjectOverride: data.welcomeEmailSubjectOverride ?? DEFAULTS.welcomeEmailSubjectOverride,
     welcomeEmailIntroOverride: data.welcomeEmailIntroOverride ?? DEFAULTS.welcomeEmailIntroOverride,
+    invoicePrefix: String(data.invoicePrefix ?? DEFAULTS.invoicePrefix),
+    invoiceIncludeYear: data.invoiceIncludeYear !== false,
+    invoicePadLength: Number(data.invoicePadLength ?? DEFAULTS.invoicePadLength),
   };
 }
 

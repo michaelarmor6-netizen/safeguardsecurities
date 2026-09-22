@@ -13,6 +13,62 @@ import {
 } from 'firebase/firestore';
 import { auth, db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
+import { getPlatformSettings, DEFAULTS } from './settingsService';
+
+export interface InvoiceNumbering {
+  prefix: string;
+  includeYear: boolean;
+  padLength: number;
+}
+
+export function sanitizeInvoicePrefix(raw: string): string {
+  const cleaned = raw.toUpperCase().replace(/[^A-Z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  return cleaned.slice(0, 16) || DEFAULTS.invoicePrefix;
+}
+
+export function clampInvoicePad(n: number): number {
+  const v = Math.floor(Number(n) || DEFAULTS.invoicePadLength);
+  return Math.min(8, Math.max(3, v));
+}
+
+export function formatInvoiceNumber(
+  numbering: InvoiceNumbering,
+  sequence: number,
+  year = new Date().getFullYear(),
+): string {
+  const prefix = sanitizeInvoicePrefix(numbering.prefix);
+  const pad = clampInvoicePad(numbering.padLength);
+  const yearPart = numbering.includeYear ? String(year % 100).padStart(2, '0') : '';
+  return `${prefix}${yearPart}${String(sequence).padStart(pad, '0')}`;
+}
+
+export function invoiceCounterId(includeYear: boolean, year = new Date().getFullYear()): string {
+  return includeYear ? `invoices-${year}` : 'invoices';
+}
+
+export async function getInvoiceNumbering(): Promise<InvoiceNumbering> {
+  const s = await getPlatformSettings();
+  return {
+    prefix: sanitizeInvoicePrefix(s.invoicePrefix),
+    includeYear: s.invoiceIncludeYear,
+    padLength: clampInvoicePad(s.invoicePadLength),
+  };
+}
+
+export async function getInvoiceNextSequence(includeYear: boolean): Promise<number> {
+  const snap = await getDoc(doc(db, 'counters', invoiceCounterId(includeYear)));
+  const last = snap.exists() ? Number(snap.data().value ?? 0) : 0;
+  return last + 1;
+}
+
+/** Persist last-issued so the next create uses `nextSequence`. */
+export async function setInvoiceNextSequence(includeYear: boolean, nextSequence: number): Promise<void> {
+  const n = Math.floor(Number(nextSequence) || 1);
+  if (n < 1) throw new Error('Next sequence must be at least 1.');
+  await runTransaction(db, async (tx) => {
+    tx.set(doc(db, 'counters', invoiceCounterId(includeYear)), { value: n - 1 });
+  });
+}
 
 export type InvoiceStatus = 'issued' | 'sent' | 'paid' | 'void';
 export type InvoiceSendMode = 'auto' | 'manual';
@@ -140,13 +196,14 @@ export async function createStaffInvoice(input: CreateInvoiceInput): Promise<str
 
   const now = new Date();
   const year = now.getFullYear();
-  const counterRef = doc(db, 'counters', `invoices-${year}`);
+  const numbering = await getInvoiceNumbering();
+  const counterRef = doc(db, 'counters', invoiceCounterId(numbering.includeYear, year));
   const invoiceRef = doc(collection(db, LIVE_COLLECTIONS.invoices));
 
   await runTransaction(db, async (tx) => {
     const counterSnap = await tx.get(counterRef);
     const next = (counterSnap.exists() ? Number(counterSnap.data().value ?? 0) : 0) + 1;
-    const number = `SG-INV${String(year % 100).padStart(2, '0')}${String(next).padStart(5, '0')}`;
+    const number = formatInvoiceNumber(numbering, next, year);
     tx.set(counterRef, { value: next });
     tx.set(invoiceRef, {
       number,

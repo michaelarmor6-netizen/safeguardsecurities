@@ -8,6 +8,7 @@ import SettingsRolesSection from './settings/SettingsRolesSection';
 import SettingsSecuritySection from './settings/SettingsSecuritySection';
 import SettingsEmailTemplatesSection from './settings/SettingsEmailTemplatesSection';
 import SettingsFundingDetailsSection from './settings/SettingsFundingDetailsSection';
+import SettingsInvoicesSection from './settings/SettingsInvoicesSection';
 
 type SectionKey =
   | 'general'
@@ -15,6 +16,7 @@ type SectionKey =
   | 'languages'
   | 'notifications'
   | 'funding-details'
+  | 'invoices'
   | 'trading-config'
   | 'roles'
   | 'security'
@@ -26,6 +28,7 @@ const SECTIONS: { key: SectionKey; label: string }[] = [
   { key: 'languages', label: 'Languages' },
   { key: 'notifications', label: 'Notifications' },
   { key: 'funding-details', label: 'Funding Details' },
+  { key: 'invoices', label: 'Invoices' },
   { key: 'trading-config', label: 'Trading Configuration' },
   { key: 'roles', label: 'Roles & Permissions' },
   { key: 'security', label: 'Security' },
@@ -68,6 +71,7 @@ export default function InvestorAdminSettingsPage() {
           {section === 'languages' && <SettingsLanguagesSection />}
           {section === 'notifications' && <SettingsNotificationsSection />}
           {section === 'funding-details' && <SettingsFundingDetailsSection />}
+          {section === 'invoices' && <SettingsInvoicesSection />}
           {section === 'trading-config' && <AdminTradingConfigSection />}
           {section === 'roles' && <SettingsRolesSection />}
           {section === 'security' && <SettingsSecuritySection />}

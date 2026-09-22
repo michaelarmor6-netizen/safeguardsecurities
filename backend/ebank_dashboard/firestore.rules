@@ -201,7 +201,8 @@ service cloud.firestore {
     // must not be able to move a request toward a payout.
     // Finance invoices: staff create official billed documents; clients may
     // read invoices issued to their uid. Create/update (issue, mark sent/paid,
-    // void) is a finance act. Invoice numbers come from counters/invoices-{YYYY}.
+    // void) is a finance act. Invoice numbers come from counters/invoices
+    // (or invoices-{YYYY} when the year is part of the series).
     match /invoices/{invoiceId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
@@ -237,12 +238,18 @@ service cloud.firestore {
 
     match /counters/{counterId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null &&
-        request.resource.data.keys().hasOnly(['value']) &&
-        request.resource.data.value == 1;
-      allow update: if request.auth != null &&
-        request.resource.data.keys().hasOnly(['value']) &&
-        request.resource.data.value == resource.data.value + 1;
+      allow create: if request.resource.data.keys().hasOnly(['value']) &&
+        request.resource.data.value is int &&
+        (
+          (request.auth != null && request.resource.data.value == 1) ||
+          (isFinance() && request.resource.data.value >= 0)
+        );
+      allow update: if request.resource.data.keys().hasOnly(['value']) &&
+        request.resource.data.value is int &&
+        (
+          (request.auth != null && request.resource.data.value == resource.data.value + 1) ||
+          (isFinance() && request.resource.data.value >= 0)
+        );
       allow delete: if false;
     }
 
@@ -327,6 +334,9 @@ service cloud.firestore {
     // Funnel campaigns and their per-lead enrollments. Staff manage both;
     // the send worker and webhook run with the Admin SDK (rules-exempt).
     // Email events are read-only evidence in the console.
+    match /crmInstruments/{instrumentId} {
+      allow read, write: if isInvestorAdmin();
+    }
     match /crmCampaigns/{campaignId} {
       allow read, write: if isInvestorAdmin();
     }
