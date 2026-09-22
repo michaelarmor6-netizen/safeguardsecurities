@@ -152,7 +152,7 @@ export default function FundingInvoicePage() {
         >
           <div className="flex items-start justify-between gap-6 pb-6" style={{ borderBottom: `2px solid ${INK}` }}>
             <div>
-              <img src="/logo.png" alt="" className="h-9 w-auto mb-2" style={{ filter: 'brightness(.25)' }} />
+              <img src="/logo-email.png" alt="SafeGuard Securities" className="h-16 w-auto mb-3 max-w-[280px] object-contain" />
               <p style={{ fontWeight: 700 }}>{settings.platformName}</p>
             </div>
             <div className="text-right">

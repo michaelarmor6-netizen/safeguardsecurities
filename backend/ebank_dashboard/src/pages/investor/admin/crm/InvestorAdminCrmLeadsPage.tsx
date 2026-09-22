@@ -165,7 +165,9 @@ export default function InvestorAdminCrmLeadsPage() {
           <select className="sg-input" disabled={busy || campaignOptions.length === 0} value=""
             onChange={(e) => { if (e.target.value) { addToCampaign(e.target.value); e.target.value = ''; } }}>
             <option value="">{campaignOptions.length ? 'Add to campaign…' : 'No campaigns yet'}</option>
-            {campaignOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {campaignOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}{c.instrumentSlug ? ` · ${c.instrumentSlug}` : ''}</option>
+            ))}
           </select>
           <button className="sg-btn-primary inline-flex items-center gap-1.5" disabled={busy} onClick={exportVicidial}>
             <Download size={16} /> Export Vicidial CSV

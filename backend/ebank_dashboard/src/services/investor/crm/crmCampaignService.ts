@@ -8,19 +8,22 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../../config/liveCollections';
-import { buildTrack, TRACK_LABELS } from './crmFunnelTemplates';
+import { buildTrack, trackLabel } from './crmFunnelTemplates';
 import { findSuppressed } from './crmSuppressionService';
+import { getInstrument } from './crmInstrumentService';
 import type { CrmLead } from './crmTypes';
 import {
   EMPTY_STATS,
   type CampaignStatus, type CampaignTrack, type CrmCampaign, type CrmEnrollment,
 } from './crmCampaignTypes';
+import type { FunnelStage } from './crmInstrumentTypes';
 
 function mapCampaign(id: string, d: DocumentData): CrmCampaign {
   return {
     id,
     name: d.name ?? '',
-    track: (d.track ?? 'gold') as CampaignTrack,
+    track: (d.instrumentSlug ?? d.track ?? 'gold') as CampaignTrack,
+    instrumentSlug: d.instrumentSlug ?? d.track ?? 'gold',
     status: (d.status ?? 'draft') as CampaignStatus,
     steps: Array.isArray(d.steps) ? d.steps : [],
     settings: d.settings ?? {
@@ -47,6 +50,7 @@ function mapEnrollment(id: string, d: DocumentData): CrmEnrollment {
     lastError: d.lastError,
     enrolledAt: d.enrolledAt?.toDate?.(),
     lastSentAt: d.lastSentAt?.toDate?.(),
+    funnelStage: d.funnelStage,
   };
 }
 
@@ -65,13 +69,33 @@ export async function createCampaignFromTrack(
   createdBy: string,
   settings: CrmCampaign['settings'],
 ): Promise<string> {
+  return createCampaignFromInstrument(track, createdBy, settings);
+}
+
+export async function createCampaignFromInstrument(
+  slug: string,
+  createdBy: string,
+  settings?: Partial<CrmCampaign['settings']>,
+): Promise<string> {
+  const instrument = await getInstrument(slug);
+  const steps = instrument?.defaultSteps?.length ? instrument.defaultSteps : buildTrack(slug);
+  const name = instrument?.name ?? trackLabel(slug);
+  const merged: CrmCampaign['settings'] = {
+    fromName: 'SafeGuard Securities',
+    appointmentUrl: instrument?.defaultAppointmentUrl ?? 'https://safeguardsecurities.us/appointments',
+    demoUrl: instrument?.defaultDemoUrl ?? 'https://global.safeguardsecurities.us/signup?demo=1',
+    companyName: 'SafeGuard Securities',
+    companyAddress: '',
+    ...settings,
+  };
   const ref = doc(collection(db, LIVE_COLLECTIONS.crmCampaigns));
   await setDoc(ref, {
-    name: `${TRACK_LABELS[track]} — ${new Date().toLocaleDateString()}`,
-    track,
-    status: 'draft',              // never born sending; an admin activates it
-    steps: buildTrack(track),
-    settings,
+    name: `${name} — ${new Date().toLocaleDateString()}`,
+    track: slug,
+    instrumentSlug: slug,
+    status: 'draft',
+    steps,
+    settings: merged,
     stats: EMPTY_STATS,
     createdBy,
     createdAt: serverTimestamp(),
@@ -126,6 +150,7 @@ export async function enrollLeads(campaign: CrmCampaign, leads: CrmLead[]): Prom
         step: 0,
         nextSendAt: new Date(),      // step 0 goes out on the worker's next tick
         status: 'active',
+        funnelStage: 'sequenced' as FunnelStage,
         enrolledAt: serverTimestamp(),
       });
     }
@@ -140,6 +165,13 @@ export async function enrollLeads(campaign: CrmCampaign, leads: CrmLead[]): Prom
     });
   }
   return result;
+}
+
+export async function setEnrollmentStage(enrollmentId: string, funnelStage: FunnelStage): Promise<void> {
+  const patch: Record<string, unknown> = { funnelStage };
+  if (funnelStage === 'converted') patch.status = 'completed';
+  if (funnelStage === 'exited') patch.status = 'unsubscribed';
+  await updateDoc(doc(db, LIVE_COLLECTIONS.crmEnrollments, enrollmentId), patch);
 }
 
 export async function listEnrollments(campaignId: string): Promise<CrmEnrollment[]> {

@@ -80,6 +80,7 @@ export function canSelfTrade(profile: Pick<InvestorProfile, 'role' | 'investorTi
 export interface InvestorProfile {
   id: string;
   email: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   displayName?: string;
@@ -133,6 +134,7 @@ function mapProfile(id: string, data: DocumentData): InvestorProfile {
   return {
     id,
     email,
+    username: typeof data.username === 'string' ? data.username : undefined,
     firstName: data.firstName,
     lastName: data.lastName,
     displayName: data.displayName,

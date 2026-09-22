@@ -4,13 +4,15 @@ import { Eye, Mail, Pause, Play, Plus } from 'lucide-react';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../../services/investor/auditService';
 import {
-  createCampaignFromTrack, getCampaign, listCampaigns, listEnrollments, updateCampaign,
+  createCampaignFromInstrument, getCampaign, listCampaigns, listEnrollments,
+  setEnrollmentStage, updateCampaign,
 } from '../../../../services/investor/crm/crmCampaignService';
 import { renderMerge } from '../../../../services/investor/crm/crmMerge';
-import { TRACK_LABELS } from '../../../../services/investor/crm/crmFunnelTemplates';
-import type {
-  CampaignTrack, CrmCampaign, CrmEnrollment,
-} from '../../../../services/investor/crm/crmCampaignTypes';
+import { trackLabel } from '../../../../services/investor/crm/crmFunnelTemplates';
+import { landingUrl, ensureBuiltinInstruments } from '../../../../services/investor/crm/crmInstrumentService';
+import type { CrmInstrument, FunnelStage } from '../../../../services/investor/crm/crmInstrumentTypes';
+import { FUNNEL_STAGES, FUNNEL_STAGE_LABELS } from '../../../../services/investor/crm/crmInstrumentTypes';
+import type { CrmCampaign, CrmEnrollment } from '../../../../services/investor/crm/crmCampaignTypes';
 
 // Funnel campaigns: a sequence of emails ending in one of two exits -
 // a booked consultation or a demo-account registration. The console edits
@@ -21,13 +23,18 @@ import type {
 export default function InvestorAdminCrmCampaignsPage() {
   const { user } = useInvestorAuth();
   const [campaigns, setCampaigns] = useState<CrmCampaign[]>([]);
+  const [instruments, setInstruments] = useState<CrmInstrument[]>([]);
   const [selected, setSelected] = useState<CrmCampaign | null>(null);
   const [enrollments, setEnrollments] = useState<CrmEnrollment[]>([]);
   const [previewStep, setPreviewStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [newSlug, setNewSlug] = useState('');
 
   const load = useCallback(() => {
     listCampaigns().then(setCampaigns).catch((e) => toast.error(e.message));
+    ensureBuiltinInstruments().then((rows) => {
+      setInstruments(rows.filter((i) => i.status === 'active'));
+    }).catch(() => {});
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -38,17 +45,12 @@ export default function InvestorAdminCrmCampaignsPage() {
     if (c) listEnrollments(c.id).then(setEnrollments).catch(() => setEnrollments([]));
   };
 
-  const create = async (track: CampaignTrack) => {
+  const create = async (slug: string) => {
+    if (!slug) return;
     setBusy(true);
     try {
-      const id = await createCampaignFromTrack(track, user?.uid ?? '', {
-        fromName: 'SafeGuard Securities',
-        appointmentUrl: 'https://safeguardsecurities.us/appointments',
-        demoUrl: 'https://global.safeguardsecurities.us/signup?demo=1',
-        companyName: 'SafeGuard Securities',
-        companyAddress: '', // CAN-SPAM: fill in Settings before activating
-      });
-      await logAction(user?.uid ?? '', user?.email ?? '', 'crm.campaign.create', `${track} campaign ${id}`);
+      const id = await createCampaignFromInstrument(slug, user?.uid ?? '');
+      await logAction(user?.uid ?? '', user?.email ?? '', 'crm.campaign.create', `${slug} campaign ${id}`);
       load();
       await open(id);
       toast.success('Campaign created as a draft — review every email, then activate.');
@@ -86,14 +88,18 @@ export default function InvestorAdminCrmCampaignsPage() {
   }, [selected, previewStep]);
 
   const funnelCounts = useMemo(() => {
-    const active = enrollments.filter((e) => e.status === 'active').length;
-    const done = enrollments.filter((e) => e.status === 'completed').length;
-    const out = enrollments.filter((e) => e.status === 'unsubscribed' || e.status === 'suppressed').length;
-    return { active, done, out };
+    const counts = Object.fromEntries(FUNNEL_STAGES.map((s) => [s, 0])) as Record<FunnelStage, number>;
+    for (const e of enrollments) {
+      const stage: FunnelStage = e.status === 'unsubscribed' || e.status === 'suppressed'
+        ? 'exited'
+        : (e.funnelStage ?? (e.status === 'completed' ? 'sequenced' : 'captured'));
+      counts[stage] += 1;
+    }
+    return counts;
   }, [enrollments]);
 
   return (
-    <div className="space-y-4">
+    <div className="sg-desk">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="sg-page-title">CRM — Funnel Campaigns</h1>
@@ -102,12 +108,18 @@ export default function InvestorAdminCrmCampaignsPage() {
             Enroll leads from the Leads page; the scheduled worker does the sending.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button className="sg-btn-secondary inline-flex items-center gap-1.5" disabled={busy} onClick={() => create('gold')}>
-            <Plus size={16} /> New Gold campaign
-          </button>
-          <button className="sg-btn-primary inline-flex items-center gap-1.5" disabled={busy} onClick={() => create('preipo')}>
-            <Plus size={16} /> New Pre-IPO campaign
+        <div className="flex flex-wrap items-end gap-2">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Instrument</label>
+            <select className="sg-input" value={newSlug} onChange={(e) => setNewSlug(e.target.value)}>
+              <option value="">Choose instrument…</option>
+              {instruments.map((i) => (
+                <option key={i.slug} value={i.slug}>{i.name}</option>
+              ))}
+            </select>
+          </div>
+          <button className="sg-btn-primary inline-flex items-center gap-1.5" disabled={busy || !newSlug} onClick={() => create(newSlug)}>
+            <Plus size={16} /> New campaign
           </button>
         </div>
       </div>
@@ -128,7 +140,7 @@ export default function InvestorAdminCrmCampaignsPage() {
             {campaigns.map((c) => (
               <tr key={c.id} className="border-b" style={{ borderColor: 'var(--sg-border)' }}>
                 <td className="p-2">{c.name}</td>
-                <td className="p-2">{TRACK_LABELS[c.track]}</td>
+                <td className="p-2">{trackLabel(c.instrumentSlug || c.track)}</td>
                 <td className="p-2">{c.status}</td>
                 <td className="p-2">{c.stats.enrolled}</td>
                 <td className="p-2">{c.stats.sent}</td>
@@ -151,10 +163,11 @@ export default function InvestorAdminCrmCampaignsPage() {
             <input className="sg-input w-80" value={selected.name}
               onChange={(e) => setSelected({ ...selected, name: e.target.value })}
               onBlur={() => updateCampaign(selected.id, { name: selected.name }).then(load)} />
-            <span className="text-sm">{TRACK_LABELS[selected.track]} · {selected.steps.length} emails</span>
-            <span className="text-sm">
-              funnel: {funnelCounts.active} in sequence · {funnelCounts.done} completed · {funnelCounts.out} opted out
-            </span>
+            <span className="text-sm">{trackLabel(selected.instrumentSlug || selected.track)} · {selected.steps.length} emails</span>
+            <a className="text-xs" style={{ color: 'var(--sg-teal)' }}
+              href={landingUrl(selected.instrumentSlug || selected.track)} target="_blank" rel="noreferrer">
+              Landing page
+            </a>
             <div className="ml-auto flex gap-2">
               {selected.status !== 'active' ? (
                 <button className="sg-btn-primary inline-flex items-center gap-1.5" onClick={() => setStatus(selected, 'active')}>
@@ -168,7 +181,16 @@ export default function InvestorAdminCrmCampaignsPage() {
             </div>
           </div>
 
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(260px, 1fr) minmax(320px, 1.4fr)' }}>
+          <div className="sg-stat-strip">
+            {FUNNEL_STAGES.map((s) => (
+              <div key={s} className="sg-panel sg-stat-chip">
+                <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>{FUNNEL_STAGE_LABELS[s]}</p>
+                <p className="font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{funnelCounts[s]}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-2">
               {selected.steps.map((s, i) => (
                 <button key={s.key}
@@ -219,6 +241,43 @@ export default function InvestorAdminCrmCampaignsPage() {
                 style={{ width: '100%', height: 560, border: 0, background: '#eef1f4' }} />
             </div>
           </div>
+
+          {enrollments.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="sg-text-muted">
+                  <tr>
+                    <th className="text-left p-2">Lead</th>
+                    <th className="text-left p-2">Email</th>
+                    <th className="text-left p-2">Stage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {enrollments.slice(0, 80).map((e) => (
+                    <tr key={e.id} className="border-t sg-row-border">
+                      <td className="p-2">{e.firstName}</td>
+                      <td className="p-2">{e.email}</td>
+                      <td className="p-2">
+                        <select
+                          className="sg-input sg-desk-select"
+                          value={e.funnelStage ?? 'sequenced'}
+                          onChange={async (ev) => {
+                            const stage = ev.target.value as FunnelStage;
+                            await setEnrollmentStage(e.id, stage);
+                            setEnrollments((rows) => rows.map((r) => r.id === e.id ? { ...r, funnelStage: stage } : r));
+                          }}
+                        >
+                          {FUNNEL_STAGES.map((s) => (
+                            <option key={s} value={s}>{FUNNEL_STAGE_LABELS[s]}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Eye, Search, Trash2 } from 'lucide-react';
+import { Eye, Trash2 } from 'lucide-react';
+import ClientSearchToolbar from '../../../components/investor/admin/ClientSearchToolbar';
 import {
   deleteInvestorProfile,
   getAllInvestorProfiles,
@@ -19,6 +20,11 @@ import {
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../services/investor/auditService';
 import ClientDetailsDrawer from './users/ClientDetailsDrawer';
+import {
+  matchesClientSearch,
+  profileFullName,
+  type ClientSearchField,
+} from '../../../lib/clientSearch';
 
 const STATUSES: AccountStatus[] = ['pending', 'active', 'suspended', 'locked'];
 const ROLES: InvestorRole[] = ['client', 'support', 'admin', 'finance', 'compliance', 'super_admin'];
@@ -82,7 +88,7 @@ function AccountManagerCell({ user, onSaved }: { user: InvestorProfile; onSaved:
   };
 
   return (
-    <div className="flex flex-col gap-1.5 min-w-[180px]">
+    <div className="flex flex-col gap-1.5 min-w-0">
       <input
         type="text"
         placeholder="Name"
@@ -114,6 +120,7 @@ export default function InvestorAdminUsersPage() {
   const [rows, setRows] = useState<InvestorProfile[]>([]);
   const [planRequests, setPlanRequests] = useState<Map<string, PlanRequest>>(new Map());
   const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState<ClientSearchField>('all');
   const [roleFilter, setRoleFilter] = useState<InvestorRole | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<AccountStatus | 'all'>('all');
   // Held by id, not by object, so the drawer picks up an inline edit on reload.
@@ -136,53 +143,77 @@ export default function InvestorAdminUsersPage() {
     return acc;
   }, {});
 
-  const displayName = (u: InvestorProfile) =>
-    [u.firstName, u.lastName].filter(Boolean).join(' ').trim() || u.displayName?.trim() || '';
+  const displayName = (u: InvestorProfile) => profileFullName(u) || u.displayName?.trim() || '';
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
     return rows.filter((u) => {
       if (roleFilter !== 'all' && u.role !== roleFilter) return false;
       if (statusFilter !== 'all' && u.accountStatus !== statusFilter) return false;
-      if (!q) return true;
-      // uid included: staff paste one in from a Firestore or log lookup.
-      return `${u.email} ${displayName(u)} ${u.id}`.toLowerCase().includes(q);
+      return matchesClientSearch(u, search, searchField);
     });
-  }, [rows, search, roleFilter, statusFilter]);
+  }, [rows, search, searchField, roleFilter, statusFilter]);
 
   const clientCount = rows.filter((u) => u.role === 'client').length;
   const pendingCount = rows.filter((u) => u.accountStatus === 'pending').length;
   const duplicateCount = Object.values(emailCounts).filter((n) => n > 1).length;
-  const filtersOn = search !== '' || roleFilter !== 'all' || statusFilter !== 'all';
+  const filtersOn = search !== '' || searchField !== 'all' || roleFilter !== 'all' || statusFilter !== 'all';
   const detailsProfile = detailsId ? rows.find((u) => u.id === detailsId) ?? null : null;
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="sg-page-title">Users</h1>
-        <p className="sg-page-sub mt-1">
-          Every profile on the platform. Set role, status, tier and plan inline; open Details for the
-          full client record - onboarding, compliance, KYC and money.
-        </p>
+    <div className="sg-desk">
+      <div className="sg-desk-head">
+        <div className="min-w-0">
+          <h1 className="sg-page-title">Users</h1>
+          <p className="sg-page-sub mt-1">
+            Every profile on the platform. Set role, status, tier and plan inline; open Details for the
+            full client record - onboarding, compliance, KYC and money.
+          </p>
+        </div>
+        <ClientSearchToolbar
+          search={search}
+          searchField={searchField}
+          onSearch={setSearch}
+          onField={setSearchField}
+          onClear={() => { setSearch(''); setSearchField('all'); setRoleFilter('all'); setStatusFilter('all'); }}
+          showClear={filtersOn}
+        >
+          <div className="sg-desk-field sg-desk-field-fixed">
+            <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Role</label>
+            <select className="sg-input" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as InvestorRole | 'all')}>
+              <option value="all">All roles</option>
+              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div className="sg-desk-field sg-desk-field-fixed">
+            <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Status</label>
+            <select className="sg-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as AccountStatus | 'all')}>
+              <option value="all">All statuses</option>
+              {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </div>
+          <span className="text-xs pb-3" style={{ color: 'var(--sg-muted-2)' }}>
+            {filtered.length} of {rows.length}
+          </span>
+        </ClientSearchToolbar>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="sg-panel p-4">
+      <div className="sg-stat-strip">
+        <div className="sg-panel sg-stat-chip">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Profiles</p>
-          <p className="text-2xl font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{rows.length}</p>
+          <p className="font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{rows.length}</p>
         </div>
-        <div className="sg-panel p-4">
+        <div className="sg-panel sg-stat-chip">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Clients</p>
-          <p className="text-2xl font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{clientCount}</p>
+          <p className="font-semibold mt-1" style={{ fontFamily: 'var(--sg-font-display)' }}>{clientCount}</p>
         </div>
-        <div className="sg-panel p-4">
+        <div className="sg-panel sg-stat-chip">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Pending</p>
-          <p className="text-2xl font-semibold mt-1" style={{ color: 'var(--sg-gold)', fontFamily: 'var(--sg-font-display)' }}>{pendingCount}</p>
+          <p className="font-semibold mt-1" style={{ color: 'var(--sg-gold)', fontFamily: 'var(--sg-font-display)' }}>{pendingCount}</p>
         </div>
-        <div className="sg-panel p-4">
+        <div className="sg-panel sg-stat-chip">
           <p className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)' }}>Duplicate emails</p>
           <p
-            className="text-2xl font-semibold mt-1"
+            className="font-semibold mt-1"
             style={{ color: duplicateCount ? 'var(--sg-danger)' : 'var(--sg-muted-2)', fontFamily: 'var(--sg-font-display)' }}
           >
             {duplicateCount}
@@ -190,77 +221,38 @@ export default function InvestorAdminUsersPage() {
         </div>
       </div>
 
-      <div className="sg-panel p-3 flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-[220px]">
-          <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Search</label>
-          <div className="relative">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 sg-input-icon" style={{ color: 'var(--sg-muted-2)' }} />
-            <input
-              className="sg-input sg-input-icon-left"
-              placeholder="Name, email or user ID"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
-        <div>
-          <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Role</label>
-          <select className="sg-input" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value as InvestorRole | 'all')}>
-            <option value="all">All roles</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs block mb-1" style={{ color: 'var(--sg-muted-2)' }}>Status</label>
-          <select className="sg-input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as AccountStatus | 'all')}>
-            <option value="all">All statuses</option>
-            {STATUSES.map((st) => <option key={st} value={st}>{st}</option>)}
-          </select>
-        </div>
-        {filtersOn && (
-          <button
-            type="button"
-            className="sg-btn-ghost"
-            onClick={() => { setSearch(''); setRoleFilter('all'); setStatusFilter('all'); }}
-          >
-            Clear
-          </button>
-        )}
-        <span className="text-xs ml-auto" style={{ color: 'var(--sg-muted-2)' }}>
-          {filtered.length} of {rows.length}
-        </span>
-      </div>
-
-      <div className="sg-panel overflow-x-auto sg-table-stack-wrap p-3 md:p-0">
-        <table className="min-w-full text-sm sg-table-stack">
+      <div className="sg-panel sg-desk-list">
+        <table className="sg-desk-table sg-table-stack text-sm">
           <thead className="sg-text-muted">
             <tr>
-              <th className="text-left p-4">Client</th>
-              <th className="text-left p-4">Role</th>
-              <th className="text-left p-4">Status</th>
-              <th className="text-left p-4">Tier</th>
-              <th className="text-left p-4">Plan</th>
-              <th className="text-left p-4">Account Manager</th>
-              <th className="text-left p-4">Actions</th>
+              <th className="text-left">Client</th>
+              <th className="text-left">Role</th>
+              <th className="text-left">Status</th>
+              <th className="text-left sg-col-mid">Tier</th>
+              <th className="text-left sg-col-wide">Plan</th>
+              <th className="text-left sg-col-wide">Account Manager</th>
+              <th className="text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((u) => (
               <tr key={u.id} className="border-t sg-row-border">
-                <td className="p-4" data-label="Client">
-                  {displayName(u) && <span className="block sg-text-main">{displayName(u)}</span>}
-                  <span className="block text-xs" style={{ color: displayName(u) ? 'var(--sg-muted-2)' : 'var(--sg-text)' }}>
-                    {u.email}
-                  </span>
-                  {emailCounts[u.email] > 1 && (
-                    <span className="text-xs font-semibold" style={{ color: 'var(--sg-danger)' }}>
-                      duplicate ({emailCounts[u.email]})
+                <td data-label="Client">
+                  <div className="sg-desk-client">
+                    {displayName(u) && <span className="sg-desk-client-name sg-text-main">{displayName(u)}</span>}
+                    <span className="sg-desk-client-email text-xs" style={{ color: displayName(u) ? 'var(--sg-muted-2)' : 'var(--sg-text)' }}>
+                      {u.email}
                     </span>
-                  )}
+                    {emailCounts[u.email] > 1 && (
+                      <span className="text-xs font-semibold" style={{ color: 'var(--sg-danger)' }}>
+                        duplicate ({emailCounts[u.email]})
+                      </span>
+                    )}
+                  </div>
                 </td>
-                <td className="p-4" data-label="Role">
+                <td data-label="Role">
                   <select
-                    className="sg-input py-1 px-2 text-sm min-w-[120px]"
+                    className="sg-input sg-desk-select"
                     value={u.role}
                     onChange={async (e) => {
                       const newRole = e.target.value as InvestorRole;
@@ -279,9 +271,9 @@ export default function InvestorAdminUsersPage() {
                     ))}
                   </select>
                 </td>
-                <td className="p-4" data-label="Status">
+                <td data-label="Status">
                   <select
-                    className="sg-input py-1 px-2 text-sm min-w-[110px]"
+                    className="sg-input sg-desk-select"
                     value={u.accountStatus}
                     onChange={async (e) => {
                       const newStatus = e.target.value as AccountStatus;
@@ -300,10 +292,10 @@ export default function InvestorAdminUsersPage() {
                     ))}
                   </select>
                 </td>
-                <td className="p-4" data-label="Tier">
+                <td className="sg-col-mid" data-label="Tier">
                   {/* Trade Desk eligibility: advanced/institutional can self-trade */}
                   <select
-                    className="sg-input py-1 px-2 text-sm min-w-[130px]"
+                    className="sg-input sg-desk-select"
                     value={u.investorTier ?? 'standard'}
                     onChange={async (e) => {
                       const newTier = e.target.value as InvestorTier;
@@ -322,9 +314,9 @@ export default function InvestorAdminUsersPage() {
                     ))}
                   </select>
                 </td>
-                <td className="p-4" data-label="Plan">
+                <td className="sg-col-wide" data-label="Plan">
                   <select
-                    className="sg-input py-1 px-2 text-sm min-w-[120px]"
+                    className="sg-input sg-desk-select"
                     value={u.plan ?? 'free'}
                     onChange={async (e) => {
                       const newPlan = e.target.value as SubscriptionPlan;
@@ -357,7 +349,7 @@ export default function InvestorAdminUsersPage() {
                   </select>
                   {planRequests.has(u.id) && (
                     <div
-                      className="text-[10px] mt-1 whitespace-nowrap"
+                      className="text-[10px] mt-1"
                       style={{ color: 'var(--sg-gold)' }}
                       title="This client asked about a plan change"
                     >
@@ -365,11 +357,11 @@ export default function InvestorAdminUsersPage() {
                     </div>
                   )}
                 </td>
-                <td className="p-4" data-label="Manager">
+                <td className="sg-col-wide" data-label="Manager">
                   <AccountManagerCell user={u} onSaved={load} />
                 </td>
-                <td className="p-4">
-                  <div className="flex gap-2">
+                <td>
+                  <div className="sg-desk-actions">
                   <button
                     type="button"
                     className="sg-action-btn flex items-center gap-1.5"

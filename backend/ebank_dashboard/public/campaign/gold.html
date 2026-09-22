@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold Investments — SafeGuard Securities</title>
+<meta name="description" content="Hold gold with defined risk, a desk that walks every ticket, and an AI engine that reads the metal around the clock. Register for the series or a free demo.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #07121f;
+    --navy-2: #0e2236;
+    --gold: #c4a35a;
+    --gold-2: #e8d5a3;
+    --ink: #1a2430;
+    --muted: #5c6b78;
+    --line: #e4e8ec;
+    --bg: #f4f1ea;
+    --paper: #fffcf7;
+    --teal: #2a9d8f;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: Manrope, system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.65;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 22px; }
+  a { color: inherit; }
+  .nav {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(7, 18, 31, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(196, 163, 90, 0.18);
+  }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; gap: 12px; }
+  .brand { color: #fff; font-weight: 700; letter-spacing: 0.04em; font-size: 14px; }
+  .brand span { color: var(--gold-2); }
+  .nav-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .nav-links a { color: #c8d4da; text-decoration: none; font-size: 13px; }
+  .nav-links a:hover { color: var(--gold-2); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 13px 22px; border-radius: 999px; font-weight: 700; font-size: 14px;
+    text-decoration: none; border: 0; cursor: pointer; font-family: inherit;
+  }
+  .btn-gold { background: linear-gradient(180deg, #e8d5a3, #c4a35a); color: #1a1408; }
+  .btn-gold:hover { filter: brightness(1.05); }
+  .btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(232, 213, 163, 0.45); }
+  .btn-navy { background: var(--navy-2); color: #fff; width: 100%; }
+  .hero {
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(196, 163, 90, 0.22), transparent 50%),
+      radial-gradient(800px 400px at 90% 10%, rgba(42, 157, 143, 0.12), transparent 45%),
+      linear-gradient(180deg, #07121f 0%, #0e2236 100%);
+    color: #fff;
+    padding: 56px 0 72px;
+  }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 40px; align-items: start; }
+  .tag { color: var(--gold-2); font-size: 11px; letter-spacing: 0.22em; font-weight: 700; }
+  h1, h2, h3 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; line-height: 1.15; }
+  h1 { font-size: clamp(36px, 5vw, 58px); margin: 14px 0 18px; }
+  .lede { font-size: 18px; color: #c5d0d8; max-width: 540px; }
+  .hero-points { margin: 28px 0 0; padding: 0; list-style: none; }
+  .hero-points li { padding: 8px 0 8px 28px; position: relative; color: #d7e0e6; font-size: 15px; }
+  .hero-points li::before { content: ""; position: absolute; left: 0; top: 14px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--gold); }
+  .hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+  .form-card {
+    background: var(--paper);
+    color: var(--ink);
+    border-radius: 18px;
+    padding: 28px 26px 24px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(196, 163, 90, 0.35);
+  }
+  .form-card h2 { font-size: 28px; margin-bottom: 6px; color: var(--navy); }
+  .form-card > p { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
+  label { display: block; font-size: 12px; font-weight: 700; margin: 12px 0 5px; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5560; }
+  input[type=text], input[type=email], input[type=tel] {
+    width: 100%; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; font-size: 15px; background: #fff;
+  }
+  input:focus { outline: 2px solid rgba(196, 163, 90, 0.45); border-color: var(--gold); }
+  .consent { display: flex; gap: 9px; align-items: flex-start; margin: 14px 0 4px; font-size: 12.5px; color: var(--muted); }
+  .submit { width: 100%; margin-top: 14px; padding: 14px; border: 0; border-radius: 999px;
+    background: linear-gradient(180deg, #e8d5a3, #c4a35a); color: #1a1408; font-weight: 800; font-size: 15px; cursor: pointer; }
+  .submit:disabled { opacity: 0.6; }
+  .ok, .err { display: none; margin-top: 12px; padding: 12px; border-radius: 10px; font-size: 14px; }
+  .ok { background: #eef8f4; color: #1b4d3e; }
+  .err { background: #fdecea; color: #8c2f28; }
+  .hp { position: absolute; left: -6000px; }
+  .alt { text-align: center; margin-top: 12px; font-size: 13px; color: var(--muted); }
+  .alt a { color: var(--teal); }
+  .stats { background: #fff; border-bottom: 1px solid var(--line); }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
+  .stat { padding: 22px 8px; text-align: center; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat b { display: block; font-family: "Cormorant Garamond", serif; font-size: 26px; color: var(--navy); }
+  .stat span { font-size: 12px; color: var(--muted); }
+  section { padding: 72px 0; }
+  .section-kicker { color: var(--gold); font-size: 11px; letter-spacing: 0.2em; font-weight: 700; }
+  h2 { font-size: clamp(28px, 4vw, 40px); color: var(--navy); margin: 8px 0 14px; }
+  .sub { color: var(--muted); max-width: 640px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 32px; }
+  .card {
+    background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+  }
+  .card h3 { font-size: 24px; margin-bottom: 8px; color: var(--navy); }
+  .card p { font-size: 14.5px; color: var(--muted); }
+  .num { color: var(--gold); font-size: 13px; font-weight: 700; letter-spacing: 0.12em; }
+  table.compare { width: 100%; border-collapse: collapse; margin-top: 28px; background: var(--paper); border-radius: 14px; overflow: hidden; }
+  table.compare th, table.compare td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--line); font-size: 14px; vertical-align: top; }
+  table.compare th { background: var(--navy); color: #fff; font-weight: 600; }
+  table.compare td:first-child { font-weight: 700; color: var(--navy); width: 22%; }
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: center; }
+  .panel {
+    background: var(--navy-2); color: #d7e0e6; border-radius: 18px; padding: 32px;
+  }
+  .panel h3 { color: var(--gold-2); font-size: 28px; margin-bottom: 10px; }
+  .steps { display: grid; gap: 16px; margin-top: 28px; }
+  .step { display: grid; grid-template-columns: 48px 1fr; gap: 14px; }
+  .step i {
+    width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+    background: #fff; border: 1px solid var(--line); font-weight: 800; color: var(--navy);
+  }
+  .faq { display: grid; gap: 10px; margin-top: 28px; }
+  .faq details { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .faq summary { cursor: pointer; font-weight: 700; color: var(--navy); }
+  .faq p { margin-top: 8px; color: var(--muted); font-size: 14.5px; }
+  .cta-band {
+    background: linear-gradient(135deg, #0e2236, #07121f);
+    color: #fff;
+  }
+  .cta-band h2 { color: #fff; }
+  footer { background: var(--navy); color: #9fb2bc; padding: 36px 0 44px; font-size: 12px; }
+  footer p { max-width: 860px; margin-bottom: 10px; }
+  footer a { color: var(--gold-2); }
+  @media (max-width: 900px) {
+    .hero-grid, .cards, .split, .stats-grid { grid-template-columns: 1fr; }
+    .stat { border-right: 0; border-bottom: 1px solid var(--line); }
+    .nav-links a:not(.btn) { display: none; }
+    table.compare { display: block; overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <div class="brand">SAFEGUARD <span>SECURITIES</span></div>
+    <div class="nav-links">
+      <a href="#why">Why gold</a>
+      <a href="#ways">How to hold it</a>
+      <a href="#process">The process</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn btn-gold" href="#register">Register</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="tag">GOLD INVESTMENTS</div>
+      <h1>Gold in the book — without the mythology.</h1>
+      <p class="lede">Allocators keep a measured share of gold because it has often moved differently from equities. We help you approach it as a structured position: known cost, a desk that explains the ticket, and an AI engine that reads the metal around the clock.</p>
+      <ul class="hero-points">
+        <li>Defined-risk gold tickets — the most a long position can cost you is known before you commit.</li>
+        <li>Desk-managed execution. You keep visibility and the final say.</li>
+        <li>A short email series, then a free demo on live market data with simulated funds.</li>
+      </ul>
+      <div class="hero-ctas">
+        <a class="btn btn-gold" href="#register">Get the gold series</a>
+        <a class="btn btn-ghost" href="mailto:info@safeguardsecurities.us?subject=Consultation%20request%20%E2%80%94%20Gold">Talk to the desk</a>
+      </div>
+    </div>
+    <div class="form-card" id="register">
+      <h2>See it before you fund it</h2>
+      <p>Four short emails on how experienced investors approach gold — then a demo of the same screens our clients use.</p>
+      <form id="lead-form" novalidate>
+        <label for="name">Full name</label>
+        <input type="text" id="name" name="name" autocomplete="name" required maxlength="120">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="email" required maxlength="160">
+        <label for="phone">Phone (optional)</label>
+        <input type="tel" id="phone" name="phone" autocomplete="tel" maxlength="24">
+        <div class="hp" aria-hidden="true">
+          <label for="website">Website</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="consent">
+          <input type="checkbox" id="consent" required>
+          <span>Email me the Gold Investments series and platform updates. I can unsubscribe in one click. My details stay with SafeGuard Securities.</span>
+        </div>
+        <button class="submit" type="submit" id="submit-btn">Send me the series</button>
+        <div class="ok" id="ok-msg">Thank you — check your inbox for the first note, or open the <a href="https://app.safeguardsecurities.us/signup">demo account</a>.</div>
+        <div class="err" id="err-msg"></div>
+      </form>
+      <p class="alt">Already know the platform? <a href="https://app.safeguardsecurities.us/signup">Open a free demo</a></p>
+    </div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="wrap stats-grid">
+    <div class="stat"><b>Defined risk</b><span>Cost known on the ticket</span></div>
+    <div class="stat"><b>Desk-led</b><span>A person on every decision</span></div>
+    <div class="stat"><b>AI-assisted</b><span>Markets read around the clock</span></div>
+    <div class="stat"><b>No promises</b><span>Markets move both ways</span></div>
+  </div>
+</div>
+
+<section id="why">
+  <div class="wrap">
+    <div class="section-kicker">WHY GOLD STILL EARNS A PLACE</div>
+    <h2>A store of value — not a slogan.</h2>
+    <p class="sub">Gold is neither the magic hedge its fans describe nor the relic its critics dismiss. Across decades it has often shown a low correlation to stocks, which is why many books keep a measured sleeve of it in inflationary or uncertain stretches. That history is context, not a forecast.</p>
+    <div class="cards">
+      <article class="card">
+        <div class="num">01</div>
+        <h3>Diversification, not decoration</h3>
+        <p>A gold sleeve is there to behave differently from the rest of the book. Sizing is a conversation about your other holdings, horizon, and what you can afford to see marked down.</p>
+      </article>
+      <article class="card">
+        <div class="num">02</div>
+        <h3>Discipline beats headlines</h3>
+        <p>Buying because a chart went vertical is how first-time buyers get hurt. We start from process: what you are buying, what it can cost, and when you would walk away.</p>
+      </article>
+      <article class="card">
+        <div class="num">03</div>
+        <h3>A ticket you can actually read</h3>
+        <p>On the SafeGuard desk, gold is a structured position with a known maximum downside on a long ticket — not a vault you never visit and not a black-box “yield.”</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="ways" style="padding-top:0">
+  <div class="wrap">
+    <div class="section-kicker">THREE WAYS TO HOLD GOLD</div>
+    <h2>Physical, funds, or instruments.</h2>
+    <p class="sub">Each route has a cost. The honest comparison is what you give up for convenience, liquidity, and control — not which one “wins.”</p>
+    <table class="compare">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Physical metal</th>
+          <th>Gold funds</th>
+          <th>Gold-linked instruments</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>What you hold</td>
+          <td>Bars or coins in storage</td>
+          <td>A fund that tracks the metal</td>
+          <td>A defined ticket on the gold price</td>
+        </tr>
+        <tr>
+          <td>Friction</td>
+          <td>Storage, insurance, bid–ask when you sell</td>
+          <td>Management fees; tracks, does not beat, the metal</td>
+          <td>Premium or structured cost, known up front</td>
+        </tr>
+        <tr>
+          <td>Who it suits</td>
+          <td>Investors who want metal they can point to</td>
+          <td>Investors who want a simple market sleeve</td>
+          <td>Investors who want sized, desk-explained exposure</td>
+        </tr>
+        <tr>
+          <td>On our platform</td>
+          <td>We can discuss it; we do not run a vault</td>
+          <td>Available as a conversation, not a default</td>
+          <td>The route most of our gold clients actually use</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <div class="wrap split">
+    <div>
+      <div class="section-kicker">AI-POWERED, HUMAN-LED</div>
+      <h2>The engine reads. The desk decides with you.</h2>
+      <p class="sub">Behind every SafeGuard gold ticket is an engine watching price structure, momentum, and the macro prints that move bullion. It writes a plain-language note. Your account manager reviews it with you. The machine does not place the trade. Nothing happens without your say-so.</p>
+    </div>
+    <div class="panel">
+      <h3>What you see in the demo</h3>
+      <p>The same insights panel live clients use, on live market data, with simulated funds. Fifteen minutes inside it will tell you more than a brochure — including that simulated results do not predict live outcomes.</p>
+    </div>
+  </div>
+</section>
+
+<section id="process" style="background:#efe9dc">
+  <div class="wrap">
+    <div class="section-kicker">FROM INTERESTED TO A TICKET</div>
+    <h2>A first gold allocation, without the leap.</h2>
+    <div class="steps">
+      <div class="step">
+        <i>1</i>
+        <div>
+          <h3>Register or talk</h3>
+          <p class="sub">Start the email series, open a demo, or book twenty minutes with the desk. No obligation to fund.</p>
+        </div>
+      </div>
+      <div class="step">
+        <i>2</i>
+        <div>
+          <h3>Size the sleeve</h3>
+          <p class="sub">We ask what else you hold, what you can leave marked to market, and whether gold belongs in the book at all. “Not now” is an acceptable answer.</p>
+        </div>
+      </div>
+      <div class="step">
+        <i>3</i>
+        <div>
+          <h3>Fund, then a first ticket</h3>
+          <p class="sub">Deposit instructions and a personal reference. Standard accounts are desk-managed: a professional executes; you see the position the moment it opens.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-kicker">QUESTIONS WE HEAR FIRST</div>
+    <h2>Plain answers.</h2>
+    <div class="faq">
+      <details open>
+        <summary>Is this a guarantee that gold will rise?</summary>
+        <p>No. Gold can fall for long stretches. We describe what the platform does and how a ticket is structured — never what you will earn.</p>
+      </details>
+      <details>
+        <summary>Do I have to trade myself?</summary>
+        <p>No. Standard accounts are desk-managed. Advanced or institutional clients can use the self-directed desk if the firm has set that tier.</p>
+      </details>
+      <details>
+        <summary>What does “defined risk” mean here?</summary>
+        <p>On a long gold ticket, the most you can lose is the amount structured into that position and shown before you commit. Using margin or selling options changes that picture and is only for clients the desk has sized for it.</p>
+      </details>
+      <details>
+        <summary>Is the demo real trading?</summary>
+        <p>The demo uses live market data and simulated funds. Results there do not predict live outcomes.</p>
+      </details>
+      <details>
+        <summary>How do you contact me after I register?</summary>
+        <p>A short email sequence, then you choose a consultation or the demo. Unsubscribe is one click. We do not sell your details.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band">
+  <div class="wrap" style="text-align:center">
+    <div class="section-kicker">NEXT STEP</div>
+    <h2>Read the series, or talk to a person.</h2>
+    <p class="sub" style="margin:0 auto 22px;color:#c5d0d8">Two doors. Both stay open. Serious investors read first.</p>
+    <div class="hero-ctas" style="justify-content:center">
+      <a class="btn btn-gold" href="#register">Register for the series</a>
+      <a class="btn btn-ghost" href="mailto:info@safeguardsecurities.us?subject=Consultation%20request%20%E2%80%94%20Gold">Book a consultation</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p>Investing involves risk, including the possible loss of the amount you commit. Nothing on this page is a recommendation or a guarantee of performance; markets move both ways. Demo accounts use simulated funds and simulated results, which do not predict live outcomes. Consider your objectives and, where appropriate, seek independent advice before investing.</p>
+    <p>&copy; SafeGuard Securities · <a href="https://safeguardsecurities.us">safeguardsecurities.us</a> · <a href="mailto:info@safeguardsecurities.us">info@safeguardsecurities.us</a></p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var t0 = Date.now();
+  var form = document.getElementById('lead-form');
+  var btn = document.getElementById('submit-btn');
+  var ok = document.getElementById('ok-msg');
+  var err = document.getElementById('err-msg');
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    err.style.display = 'none';
+    var name = document.getElementById('name').value.trim();
+    var email = document.getElementById('email').value.trim();
+    if (!name || !email || !document.getElementById('consent').checked) {
+      err.textContent = 'Please fill in your name and email, and tick the consent box.';
+      err.style.display = 'block';
+      return;
+    }
+    btn.disabled = true;
+    fetch('https://us-central1-e-bank-dashboard.cloudfunctions.net/leadCapture', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        track: 'gold',
+        name: name,
+        email: email,
+        phone: document.getElementById('phone').value.trim(),
+        website: document.getElementById('website').value,
+        dwellMs: Date.now() - t0,
+        page: location.href
+      })
+    }).then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .then(function (res) {
+        if (res.s === 200) { form.style.display = 'none'; ok.style.display = 'block'; }
+        else {
+          err.textContent = (res.j && res.j.error) || 'Something went wrong — please try again.';
+          err.style.display = 'block'; btn.disabled = false;
+        }
+      })
+      .catch(function () {
+        err.textContent = 'Could not reach the server — please try again in a moment.';
+        err.style.display = 'block'; btn.disabled = false;
+      });
+  });
+})();
+</script>
+</body>
+</html>

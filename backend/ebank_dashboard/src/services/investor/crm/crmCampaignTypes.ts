@@ -7,7 +7,8 @@
 // so admins can edit any step's subject or body without a deploy, and the
 // send worker in functions-crm needs no template code at all.
 
-export type CampaignTrack = 'gold' | 'preipo';
+// Slug of a crmInstruments row. Legacy campaigns used 'gold' | 'preipo'.
+export type CampaignTrack = string;
 
 export interface CampaignStep {
   key: string;          // stable id within the campaign ('g1'..'g5')
@@ -29,7 +30,8 @@ export interface CampaignSettings {
 export interface CrmCampaign {
   id: string;
   name: string;
-  track: CampaignTrack;
+  track: CampaignTrack;           // instrument slug (legacy field name)
+  instrumentSlug: string;
   status: CampaignStatus;
   steps: CampaignStep[];
   settings: CampaignSettings;
@@ -61,6 +63,7 @@ export interface CrmEnrollment {
   lastError?: string;
   enrolledAt?: Date;
   lastSentAt?: Date;
+  funnelStage?: import('./crmInstrumentTypes').FunnelStage;
 }
 
 export const EMPTY_STATS: CrmCampaign['stats'] = {

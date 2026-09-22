@@ -52,6 +52,7 @@ import InvestorAdminSettingsPage from './pages/investor/admin/InvestorAdminSetti
 import InvestorAdminCrmLeadsPage from './pages/investor/admin/crm/InvestorAdminCrmLeadsPage';
 import InvestorAdminCrmImportsPage from './pages/investor/admin/crm/InvestorAdminCrmImportsPage';
 import InvestorAdminCrmCampaignsPage from './pages/investor/admin/crm/InvestorAdminCrmCampaignsPage';
+import InvestorAdminCrmInstrumentsPage from './pages/investor/admin/crm/InvestorAdminCrmInstrumentsPage';
 import { useApplyBrandColors } from './hooks/useApplyBrandColors';
 import './styles/safeguardTheme.css';
 
@@ -140,6 +141,7 @@ function SafeguardRoutes() {
         <Route path="crm-leads" element={<InvestorAdminCrmLeadsPage />} />
         <Route path="crm-imports" element={<InvestorAdminCrmImportsPage />} />
         <Route path="crm-campaigns" element={<InvestorAdminCrmCampaignsPage />} />
+        <Route path="crm-instruments" element={<InvestorAdminCrmInstrumentsPage />} />
         <Route path="audit" element={<InvestorAdminAuditPage />} />
         <Route path="settings" element={<InvestorAdminSettingsPage />} />
       </Route>

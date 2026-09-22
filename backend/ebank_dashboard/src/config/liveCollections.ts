@@ -29,6 +29,7 @@ export const LIVE_COLLECTIONS = {
   crmLeads: 'crmLeads',
   crmImports: 'crmImports',
   crmSuppression: 'crmSuppression',
+  crmInstruments: 'crmInstruments',
   crmCampaigns: 'crmCampaigns',
   crmEnrollments: 'crmEnrollments',
   crmEmailEvents: 'crmEmailEvents',

@@ -5,6 +5,13 @@ import { getPendingApplicants, updateInvestorProfile } from '../../../services/i
 import type { InvestorProfile } from '../../../services/investor/profileService';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../services/investor/auditService';
+import {
+  matchesClientSearch,
+  profileFullName,
+  profileUsername,
+  type ClientSearchField,
+} from '../../../lib/clientSearch';
+import ClientSearchToolbar from '../../../components/investor/admin/ClientSearchToolbar';
 
 // Applicant queue. Two rules shape it:
 //   * oldest first by default - this is a work queue, and FIFO is the only
@@ -32,8 +39,7 @@ function fmtWaiting(d?: Date): string {
 }
 
 function applicantName(u: InvestorProfile): string {
-  const name = u.displayName || `${u.firstName ?? ''} ${u.lastName ?? ''}`.trim();
-  return name || '—';
+  return profileFullName(u) || profileUsername(u) || '—';
 }
 
 export default function InvestorAdminApplicantsPage() {
@@ -41,6 +47,8 @@ export default function InvestorAdminApplicantsPage() {
   const [rows, setRows] = useState<InvestorProfile[]>([]);
   const [oldestFirst, setOldestFirst] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [searchField, setSearchField] = useState<ClientSearchField>('all');
 
   const load = () =>
     getPendingApplicants()
@@ -53,11 +61,12 @@ export default function InvestorAdminApplicantsPage() {
   // composite index for a list that is rarely more than a page long.
   // Profiles with no createdAt (legacy rows) sink to the bottom either way.
   const sorted = useMemo(() => {
-    const withDate = rows.filter((r) => r.createdAt);
-    const without = rows.filter((r) => !r.createdAt);
+    const matched = rows.filter((r) => matchesClientSearch(r, search, searchField));
+    const withDate = matched.filter((r) => r.createdAt);
+    const without = matched.filter((r) => !r.createdAt);
     withDate.sort((a, b) => (a.createdAt!.getTime() - b.createdAt!.getTime()) * (oldestFirst ? 1 : -1));
     return [...withDate, ...without];
-  }, [rows, oldestFirst]);
+  }, [rows, oldestFirst, search, searchField]);
 
   const act = async (u: InvestorProfile, status: 'active' | 'suspended') => {
     const verb = status === 'active' ? 'approve' : 'decline';
@@ -77,31 +86,40 @@ export default function InvestorAdminApplicantsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between gap-3 flex-wrap">
-        <div>
+    <div className="sg-desk">
+      <div className="sg-desk-head">
+        <div className="min-w-0">
           <h1 className="sg-page-title">New Applicants{rows.length > 0 ? ` (${rows.length})` : ''}</h1>
           <p className="sg-page-sub mt-1">
             Sorted {oldestFirst ? 'oldest first — the fair processing order' : 'newest first'}.
             Applications waiting more than 3 days are flagged.
           </p>
         </div>
-        <button type="button" className="sg-action-btn inline-flex items-center gap-1.5"
-          onClick={() => setOldestFirst((v) => !v)}>
-          {oldestFirst ? <ArrowUpNarrowWide size={15} /> : <ArrowDownWideNarrow size={15} />}
-          {oldestFirst ? 'Oldest first' : 'Newest first'}
-        </button>
+        <ClientSearchToolbar
+          search={search}
+          searchField={searchField}
+          onSearch={setSearch}
+          onField={setSearchField}
+          onClear={() => setSearch('')}
+          showClear={search !== ''}
+        >
+          <button type="button" className="sg-action-btn inline-flex items-center gap-1.5"
+            onClick={() => setOldestFirst((v) => !v)}>
+            {oldestFirst ? <ArrowUpNarrowWide size={15} /> : <ArrowDownWideNarrow size={15} />}
+            {oldestFirst ? 'Oldest first' : 'Newest first'}
+          </button>
+        </ClientSearchToolbar>
       </div>
-      <div className="sg-panel overflow-x-auto">
-        <table className="min-w-full text-sm">
+      <div className="sg-panel sg-desk-list">
+        <table className="sg-desk-table sg-table-stack text-sm">
           <thead className="sg-text-muted">
             <tr>
-              <th className="text-left p-4">Applicant</th>
-              <th className="text-left p-4">Email</th>
-              <th className="text-left p-4">Submitted</th>
-              <th className="text-left p-4">Waiting</th>
-              <th className="text-left p-4">Source</th>
-              <th className="text-left p-4">Actions</th>
+              <th className="text-left">Applicant</th>
+              <th className="text-left">Email</th>
+              <th className="text-left sg-col-mid">Submitted</th>
+              <th className="text-left">Waiting</th>
+              <th className="text-left sg-col-wide">Source</th>
+              <th className="text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -109,10 +127,14 @@ export default function InvestorAdminApplicantsPage() {
               const stale = !!u.createdAt && Date.now() - u.createdAt.getTime() > STALE_MS;
               return (
                 <tr key={u.id} className="border-t sg-row-border">
-                  <td className="p-4 sg-text-main">{applicantName(u)}</td>
-                  <td className="p-4 sg-text-main">{u.email}</td>
-                  <td className="p-4 sg-text-muted whitespace-nowrap">{fmtSubmitted(u.createdAt)}</td>
-                  <td className="p-4 whitespace-nowrap">
+                  <td className="sg-text-main" data-label="Applicant">
+                    <span className="sg-desk-client-name">{applicantName(u)}</span>
+                  </td>
+                  <td className="sg-text-main" data-label="Email">
+                    <span className="sg-desk-client-email">{u.email}</span>
+                  </td>
+                  <td className="sg-text-muted sg-col-mid" data-label="Submitted">{fmtSubmitted(u.createdAt)}</td>
+                  <td data-label="Waiting">
                     <span className="sg-text-muted">{fmtWaiting(u.createdAt)}</span>
                     {stale && (
                       <span className="ml-2 text-xs font-semibold" style={{ color: 'var(--sg-amber, #f59e0b)' }}>
@@ -120,23 +142,31 @@ export default function InvestorAdminApplicantsPage() {
                       </span>
                     )}
                   </td>
-                  <td className="p-4 sg-text-muted">{u.onboardingSource === 'admin' ? 'staff-created' : 'self-signup'}</td>
-                  <td className="p-4 whitespace-nowrap">
-                    <button type="button" className="sg-action-btn" disabled={busyId === u.id}
-                      onClick={() => act(u, 'active')}>
-                      Approve
-                    </button>
-                    <button type="button" className="sg-action-btn ml-2" style={{ opacity: 0.75 }}
-                      disabled={busyId === u.id} onClick={() => act(u, 'suspended')}>
-                      Decline
-                    </button>
+                  <td className="sg-text-muted sg-col-wide" data-label="Source">
+                    {u.onboardingSource === 'admin' ? 'staff-created' : 'self-signup'}
+                  </td>
+                  <td>
+                    <div className="sg-desk-actions">
+                      <button type="button" className="sg-action-btn" disabled={busyId === u.id}
+                        onClick={() => act(u, 'active')}>
+                        Approve
+                      </button>
+                      <button type="button" className="sg-action-btn" style={{ opacity: 0.75 }}
+                        disabled={busyId === u.id} onClick={() => act(u, 'suspended')}>
+                        Decline
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
             })}
           </tbody>
         </table>
-        {rows.length === 0 && <p className="p-6 sg-text-muted text-center">No pending applicants.</p>}
+        {sorted.length === 0 && (
+          <p className="p-6 sg-text-muted text-center">
+            {rows.length === 0 ? 'No pending applicants.' : 'No applicants match this search.'}
+          </p>
+        )}
       </div>
     </div>
   );

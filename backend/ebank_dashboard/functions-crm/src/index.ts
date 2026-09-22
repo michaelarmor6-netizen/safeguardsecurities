@@ -25,6 +25,7 @@ import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import {
   GI_MAX_BATCH, giVerify, validateGiLead, type GiLeadIn,
 } from './giValidation';
+import { renderCampaignLanding } from './landingHtml';
 
 initializeApp();
 const db = () => getFirestore();
@@ -139,10 +140,12 @@ export const processCampaignQueue = onSchedule(
         }
 
         const unsubUrl = `${PUBLIC_BASE.value()}/unsubscribe?t=${unsubscribeToken(docSnap.id, linkSecret)}`;
+        const exit = (kind: 'appointment' | 'demo') =>
+          `${PUBLIC_BASE.value()}/funnelExit?kind=${kind}&eid=${encodeURIComponent(docSnap.id)}&t=${sign(`exit:${kind}:${docSnap.id}`, linkSecret)}`;
         const ctx = {
           firstName: e.firstName || 'there',
-          appointmentUrl: campaign.settings?.appointmentUrl ?? '',
-          demoUrl: campaign.settings?.demoUrl ?? '',
+          appointmentUrl: exit('appointment'),
+          demoUrl: exit('demo'),
           companyName: campaign.settings?.companyName ?? 'SafeGuard Securities',
           companyAddress: campaign.settings?.companyAddress ?? '',
           unsubscribeUrl: unsubUrl,
@@ -274,6 +277,9 @@ export const resendWebhook = onRequest({ secrets: [CRM_LINK_SECRET] }, async (re
       enrollmentId, campaignId: campaignId ?? null, type: stat ?? type,
       at: FieldValue.serverTimestamp(),
     });
+    if (type === 'email.opened' || type === 'email.clicked') {
+      await advanceFunnel(enrollmentId, 'engaged');
+    }
   }
 
   // The non-negotiable: bounces and complaints suppress, automatically.
@@ -423,7 +429,9 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
     res.status(400).json({ error: 'That email address does not look right.' });
     return;
   }
-  if (track !== 'gold' && track !== 'preipo') {
+  const instrument = await db().collection('crmInstruments').doc(track).get();
+  const legacy = track === 'gold' || track === 'preipo' || track === 'gold-options';
+  if (!legacy && (!instrument.exists || instrument.data()?.status === 'archived')) {
     res.status(400).json({ error: 'Unknown campaign track.' });
     return;
   }
@@ -449,7 +457,7 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
         firstName, lastName, company: null,
         phoneE164: /^\+[1-9][0-9]{6,14}$/.test(phone) ? phone : null,
         email, country: null,
-        tags: [track === 'gold' ? 'gold-landing' : 'preipo-landing'],
+        tags: [`${track}-landing`],
         status: 'new',
         source: { kind: 'manual', file: `landing:${track}`, page },
         consentBasis: 'inquiry',
@@ -482,6 +490,7 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
           campaignId: campaign.id, leadId: leadRef.id, email,
           firstName: firstName || 'there',
           step: 0, nextSendAt: Timestamp.now(), status: 'active',
+          funnelStage: 'sequenced',
           enrolledAt: FieldValue.serverTimestamp(),
         });
         await campaign.ref.update({ 'stats.enrolled': FieldValue.increment(1) });
@@ -495,4 +504,83 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
     console.error('leadCapture failed:', err);
     res.status(500).json({ error: 'Something went wrong on our side — please try again.' });
   }
+});
+
+const STAGE_RANK: Record<string, number> = {
+  captured: 1, sequenced: 2, engaged: 3, appointment: 4, demo: 4, converted: 5, exited: 6,
+};
+
+async function advanceFunnel(enrollmentId: string, next: string): Promise<void> {
+  const ref = db().collection('crmEnrollments').doc(enrollmentId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const current = String(snap.data()?.funnelStage ?? 'captured');
+  if (current === 'exited' || current === 'converted') return;
+  if (current === 'appointment' && next === 'demo') {
+    await ref.update({ funnelStage: 'demo' });
+    return;
+  }
+  if (current === 'demo' && next === 'appointment') {
+    await ref.update({ funnelStage: 'appointment' });
+    return;
+  }
+  if ((STAGE_RANK[next] ?? 0) >= (STAGE_RANK[current] ?? 0)) {
+    await ref.update({ funnelStage: next });
+  }
+}
+
+export const funnelExit = onRequest({ secrets: [CRM_LINK_SECRET], cors: true }, async (req: Request, res: Response) => {
+  const kind = String(req.query.kind ?? '');
+  const eid = String(req.query.eid ?? '');
+  const token = String(req.query.t ?? '');
+  if (kind !== 'appointment' && kind !== 'demo') {
+    res.status(400).send('Unknown exit.');
+    return;
+  }
+  const expected = sign(`exit:${kind}:${eid}`, CRM_LINK_SECRET.value());
+  const a = Buffer.from(token);
+  const b = Buffer.from(expected);
+  if (!eid || a.length !== b.length || !timingSafeEqual(a, b)) {
+    res.status(400).send('Invalid funnel link.');
+    return;
+  }
+  const enroll = await db().collection('crmEnrollments').doc(eid).get();
+  if (enroll.exists) {
+    await advanceFunnel(eid, kind);
+  }
+  const campaignId = enroll.data()?.campaignId;
+  let dest = kind === 'appointment'
+    ? 'https://safeguardsecurities.us/appointments'
+    : 'https://global.safeguardsecurities.us/signup?demo=1';
+  if (campaignId) {
+    const c = await db().collection('crmCampaigns').doc(campaignId).get();
+    const settings = c.data()?.settings ?? {};
+    dest = kind === 'appointment'
+      ? (settings.appointmentUrl || dest)
+      : (settings.demoUrl || dest);
+  }
+  res.redirect(302, dest);
+});
+
+export const campaignLanding = onRequest({ cors: true }, async (req: Request, res: Response) => {
+  const slug = String(req.query.slug ?? '').trim();
+  if (!slug) {
+    res.status(400).send('Missing instrument slug.');
+    return;
+  }
+  const inst = await db().collection('crmInstruments').doc(slug).get();
+  if (!inst.exists || inst.data()?.status === 'archived') {
+    res.status(404).send('This campaign page is not available.');
+    return;
+  }
+  const d = inst.data()!;
+  const html = renderCampaignLanding({
+    slug,
+    name: String(d.name ?? slug),
+    landing: d.landing ?? { tag: '', headline: slug, subhead: '', bullets: [], quote: '', formTitle: 'Register', formBody: '', submitLabel: 'Continue', consentLabel: 'Email me this series.' },
+    riskDisclosure: String(d.riskDisclosure ?? ''),
+    captureUrl: `${PUBLIC_BASE.value()}/leadCapture`,
+  });
+  res.set('Cache-Control', 'public, max-age=60');
+  res.status(200).send(html);
 });

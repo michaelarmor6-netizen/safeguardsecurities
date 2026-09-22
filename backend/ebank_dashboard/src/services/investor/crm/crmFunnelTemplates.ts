@@ -16,7 +16,7 @@ const ACCENT = '#2a9d8f';
 const NAVY = '#0e2a3a';
 
 function shell(preheader: string, bodyHtml: string, ctaLabel: string, ctaUrl: string,
-  secondary?: { label: string; url: string }): string {
+  secondary?: { label: string; url: string }, extraRisk?: string): string {
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>@media only screen and (max-width:620px){.container{width:100%!important}.px{padding-left:20px!important;padding-right:20px!important}}</style>
@@ -45,6 +45,7 @@ ${bodyHtml}
     email is a recommendation or a guarantee of performance; markets move both ways. Demo accounts
     use simulated funds and simulated results, which do not predict live outcomes. Consider your
     objectives and, where appropriate, seek independent advice before investing.
+    ${extraRisk ? extraRisk : ''}
   </p>
   <p style="margin:0;font-size:11px;line-height:1.6;color:#8b959c;">
     {{companyName}} · {{companyAddress}} · <a href="{{unsubscribeUrl}}" style="color:${ACCENT};">Unsubscribe</a>
@@ -211,11 +212,101 @@ export function preIpoTrack(): CampaignStep[] {
   ];
 }
 
-export function buildTrack(track: CampaignTrack): CampaignStep[] {
-  return track === 'gold' ? goldTrack() : preIpoTrack();
+const OPTIONS_RISK =
+  ' Options and futures can expire worthless. You can lose the entire premium paid, and a margined position can cost more than you first commit. This is not income, yield, or a forecast.';
+
+export function goldOptionsTrack(): CampaignStep[] {
+  return [
+    {
+      key: 'go1', dayOffset: 0,
+      subject: 'Gold options on futures: what the instrument actually is',
+      html: shell(
+        'Defined-risk gold options — exposure without a vault, and without mythology.',
+        h('Futures. Options. Gold — without the slogan') +
+        p('Hi {{firstName}},') +
+        p('A gold option on a futures contract is not a bar in a vault and it is not a bet that “gold always goes up.” It is a <strong>defined-expiry right</strong> to gold-futures exposure: you know the most the option can cost you (the premium) before you commit, and you know the date that right ends.') +
+        p('Over the next few notes we will walk through how that instrument is structured, how our desk sizes a first position, and how the AI engine reads the metal — then a person reviews it with you. Nothing here is a recommendation or a promise of performance.') +
+        p('If you would rather start with a conversation, the desk is open.'),
+        'Book a consultation', '{{appointmentUrl}}',
+        { label: 'Or explore the platform with a free demo account', url: '{{demoUrl}}' },
+        OPTIONS_RISK,
+      ),
+    },
+    {
+      key: 'go2', dayOffset: 2,
+      subject: 'Premium, expiry, and why “unlimited gold upside” is the wrong frame',
+      html: shell(
+        'What you pay, when the right ends, and what defined risk actually means.',
+        h('The three numbers that matter') +
+        p('Hi {{firstName}},') +
+        p('Every gold-options position we discuss has three numbers on the ticket: <strong>the premium</strong> (the most the long option can cost you), <strong>the strike</strong> (the level the futures must reach for the right to have value), and <strong>the expiry</strong> (the day that right disappears). Miss expiry and the option can be worth nothing — that is not a footnote; it is the product.') +
+        p('That is why we talk about <strong>defined risk</strong>, not “upside.” A long option’s maximum loss is the premium. Selling or using margin changes that picture and is only for clients the desk has sized for it.') +
+        p('The demo account shows the same ticket fields our live clients see, with simulated funds.'),
+        'Open a free demo account', '{{demoUrl}}',
+        { label: 'Prefer a walkthrough? Book a consultation', url: '{{appointmentUrl}}' },
+        OPTIONS_RISK,
+      ),
+    },
+    {
+      key: 'go3', dayOffset: 3,
+      subject: 'How the desk and the AI read a gold-options market',
+      html: shell(
+        'Price structure, event risk, and a human who still makes the call with you.',
+        h('The engine reads; the desk decides with you') +
+        p('Hi {{firstName}},') +
+        p('Behind a SafeGuard gold-options ticket is the same AI engine we use on the rest of the book: structure, momentum, and the macro prints that move bullion. It turns that into <strong>plain-language notes your account manager reviews with you</strong>. The machine does not place the trade. You do not get a signal and a “buy now.”') +
+        quote('AI-powered, human-led: the engine surfaces the map, your desk manager walks the expiry and the premium, and nothing happens without your say-so.') +
+        p('Fifteen minutes in the demo — live market data, simulated funds — will tell you more than a brochure about how that panel actually looks.'),
+        'See the AI in action — free demo', '{{demoUrl}}',
+        { label: 'Book a consultation instead', url: '{{appointmentUrl}}' },
+        OPTIONS_RISK,
+      ),
+    },
+    {
+      key: 'go4', dayOffset: 3,
+      subject: 'What a first gold-options allocation looks like, step by step',
+      html: shell(
+        'Consultation, funding, then a ticket you can see — not a leap.',
+        h('From interested to a ticket, without the leap') +
+        p('Hi {{firstName}},') +
+        p('How new clients start with gold options here: <strong>1)</strong> a short consultation to see whether options or futures exposure belongs in your book at all; <strong>2)</strong> a funded account with deposit instructions; <strong>3)</strong> a first defined-risk ticket, placed by your desk manager and visible the moment it opens.') +
+        p('Standard accounts are <strong>desk-managed</strong>. You keep visibility and the final say. We will not size a first options ticket as if it were a savings product.') +
+        p('The consultation is free, about twenty minutes, and commits you to nothing.'),
+        'Book your consultation', '{{appointmentUrl}}',
+        { label: 'Still exploring? The demo stays free', url: '{{demoUrl}}' },
+        OPTIONS_RISK,
+      ),
+    },
+    {
+      key: 'go5', dayOffset: 4,
+      subject: 'Last note on gold options (the door stays open)',
+      html: shell(
+        'Closing the series — two doors, no forecast.',
+        h('Where this leaves you') +
+        p('Hi {{firstName}},') +
+        p('This is the last email in the gold-options series. You have seen what the instrument is, the three numbers on the ticket, how the desk and the AI work together, and how a first allocation is actually opened.') +
+        p('Two doors, both open: <strong>talk to a person</strong> about whether this belongs in your book, or <strong>open a demo</strong> and judge the screens yourself. Options and futures are not for every investor; that is a feature of an honest desk, not a soft close.') +
+        p('Thank you for reading this far.'),
+        'Book a consultation', '{{appointmentUrl}}',
+        { label: 'Open the free demo account', url: '{{demoUrl}}' },
+        OPTIONS_RISK,
+      ),
+    },
+  ];
 }
 
-export const TRACK_LABELS: Record<CampaignTrack, string> = {
+export function buildTrack(track: CampaignTrack): CampaignStep[] {
+  if (track === 'gold-options') return goldOptionsTrack();
+  if (track === 'preipo') return preIpoTrack();
+  return goldTrack();
+}
+
+export const TRACK_LABELS: Record<string, string> = {
+  'gold-options': 'Futures — Gold Options',
   gold: 'Gold Investments',
   preipo: 'Pre-IPO Access',
 };
+
+export function trackLabel(slug: string): string {
+  return TRACK_LABELS[slug] || slug;
+}
