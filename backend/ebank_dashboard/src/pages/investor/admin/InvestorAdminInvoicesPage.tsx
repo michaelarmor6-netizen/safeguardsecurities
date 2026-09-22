@@ -158,7 +158,7 @@ export default function InvestorAdminInvoicesPage() {
         <div>
           <h1 className="text-2xl font-semibold sg-text-main">Invoices</h1>
           <p className="text-sm" style={{ color: 'var(--sg-muted)' }}>
-            Issue official invoices with the SafeGuard seal. Send automatically through the configured mail client, or compose manually.
+            Issue official invoices. Send automatically through the configured mail client, or compose manually.
           </p>
         </div>
         {canWrite && (

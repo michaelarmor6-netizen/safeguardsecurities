@@ -667,7 +667,6 @@ export const sendInvoiceOnCreate = onDocumentCreated(
         })
       : '';
     const logoUrl = 'https://app.safeguardsecurities.us/logo-email.png';
-    const sealUrl = 'https://app.safeguardsecurities.us/seal-official.svg';
     const portalUrl = `https://app.safeguardsecurities.us/invoice/${event.params.invoiceId}`;
     const name = String(data.billToName ?? to);
 
@@ -706,8 +705,7 @@ export const sendInvoiceOnCreate = onDocumentCreated(
   </td></tr>
   <tr><td style="padding:36px 30px;color:#003d82;">
     <div style="font-size:18px;font-weight:600;">Invoice ${esc(number)}</div>
-    <p style="font-size:14px;line-height:1.7;">Hello ${esc(name)}, please find your official ${esc(platformName)} invoice.
-    This document is time-stamped and bears the firm digital seal.</p>
+    <p style="font-size:14px;line-height:1.7;">Hello ${esc(name)}, please find your official ${esc(platformName)} invoice.</p>
     <p style="font-size:13px;color:#5b6472;">Issued: ${esc(issued)}</p>
     <table width="100%">${itemRows}
       <tr><td colspan="2" style="padding-top:12px;text-align:right;color:#5b6472;">Subtotal</td><td style="padding-top:12px;text-align:right;font-weight:600;">${esc(money(subtotal))}</td></tr>
@@ -719,14 +717,10 @@ export const sendInvoiceOnCreate = onDocumentCreated(
     <div style="text-align:center;padding:20px 0 8px;">
       <a href="${esc(portalUrl)}" style="display:inline-block;background:#003d82;color:#fff;padding:12px 32px;text-decoration:none;border-radius:4px;font-weight:600;">View invoice in portal</a>
     </div>
-    <div style="text-align:center;margin-top:12px;">
-      <img src="${esc(sealUrl)}" alt="Official digital seal" width="96" height="96" style="width:96px;height:96px;" />
-      <div style="font-size:10px;color:#5b6472;letter-spacing:.08em;text-transform:uppercase;">Official digital seal</div>
-    </div>
   </td></tr>
   <tr><td align="center" style="background:#f0f0f0;padding:24px;font-size:11px;color:#666;">
     <img src="${esc(logoUrl)}" alt="" height="32" /><br/>
-    ${esc(platformName)} · Confidential invoice · Electronically issued and sealed
+    ${esc(platformName)} · Confidential invoice · Electronically issued
   </td></tr>
 </table></td></tr></table></body></html>`;
 

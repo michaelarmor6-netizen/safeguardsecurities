@@ -1,10 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Printer } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { ArrowLeft, Copy, Printer } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import { getInvoiceById, formatInvoiceMoney, invoiceSubtotal, invoiceTaxAmount, invoiceTotal, type StaffInvoice } from '../../services/investor/invoiceService';
 import { getFundingDetails, bankInstructionRows, paymentReasonLine, type FundingDetails } from '../../services/investor/fundingDetailsService';
 import { getPlatformSettings, DEFAULTS as SETTINGS_DEFAULTS, type PlatformSettings } from '../../services/investor/settingsService';
+import { buildInvoiceEmailHtml, buildInvoiceEmailText } from '../../services/investor/invoiceEmail';
+import { copyHtmlForEmail, copyHtmlSource } from '../../lib/copyHtmlForEmail';
 import '../../styles/safeguardTheme.css';
 
 const INK = '#101623';
@@ -50,6 +53,22 @@ export default function StaffInvoicePage() {
       .finally(() => setLoading(false));
   }, [user, invoiceId]);
 
+  const pasteHtml = useMemo(() => {
+    if (!invoice) return '';
+    return buildInvoiceEmailHtml({
+      invoice,
+      platformName: settings.platformName,
+      logoUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/logo-email.png`,
+      portalUrl: `${typeof window !== 'undefined' ? window.location.origin : ''}/invoice/${invoice.id}`,
+      details,
+    });
+  }, [invoice, details, settings]);
+
+  const pastePlain = useMemo(() => {
+    if (!invoice) return '';
+    return buildInvoiceEmailText({ invoice, platformName: settings.platformName, details });
+  }, [invoice, details, settings]);
+
   if (authLoading) return null;
   if (!user) return <Navigate to="/login" replace />;
 
@@ -82,33 +101,58 @@ export default function StaffInvoicePage() {
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
-          <button type="button" className="sg-btn-primary flex items-center gap-2" onClick={() => window.print()}>
-            <Printer className="h-4 w-4" />
-            Print / Save PDF
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  className="sg-btn-primary flex items-center gap-2"
+                  onClick={async () => {
+                    try {
+                      const mode = await copyHtmlForEmail(pasteHtml, pastePlain);
+                      toast.success(
+                        mode === 'rich'
+                          ? 'Invoice copied — paste into Thunderbird HTML compose (Ctrl+V)'
+                          : 'HTML source copied — Thunderbird: Insert → HTML, then paste',
+                      );
+                    } catch {
+                      toast.error('Copy failed');
+                    }
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                  Copy HTML for Thunderbird
+                </button>
+                <button
+                  type="button"
+                  className="sg-action-btn flex items-center gap-2"
+                  onClick={async () => {
+                    try {
+                      await copyHtmlSource(pasteHtml);
+                      toast.success('HTML source copied — Thunderbird: Insert → HTML');
+                    } catch {
+                      toast.error('Copy failed');
+                    }
+                  }}
+                >
+                  Copy HTML source
+                </button>
+              </>
+            )}
+            <button type="button" className="sg-btn-primary flex items-center gap-2" onClick={() => window.print()}>
+              <Printer className="h-4 w-4" />
+              Print / Save PDF
+            </button>
+          </div>
         </div>
 
         <div
           className="relative rounded-[14px] p-8 sm:p-10 print:rounded-none print:p-8 print:shadow-none overflow-hidden"
           style={{ background: '#ffffff', color: INK, boxShadow: '0 8px 30px rgba(0,0,0,.25)' }}
         >
-          <img
-            src="/seal-official.svg"
-            alt=""
-            className="pointer-events-none select-none"
-            style={{
-              position: 'absolute',
-              right: 28,
-              bottom: 88,
-              width: 148,
-              height: 148,
-              opacity: 0.22,
-            }}
-          />
-
           <div className="flex items-start justify-between gap-6 pb-6" style={{ borderBottom: `2px solid ${INK}` }}>
             <div>
-              <img src="/logo.png" alt="SafeGuard Securities" className="h-10 w-auto mb-2" />
+              <img src="/logo-email.png" alt="SafeGuard Securities" className="h-16 w-auto mb-3 max-w-[280px] object-contain" />
               <p style={{ fontWeight: 700 }}>{settings.platformName}</p>
               {details?.companyAddress && (
                 <p style={{ color: MUTED, fontSize: 12, whiteSpace: 'pre-wrap', maxWidth: 240 }}>{details.companyAddress}</p>
@@ -215,16 +259,12 @@ export default function StaffInvoicePage() {
             <p style={{ color: MUTED, fontSize: 13, whiteSpace: 'pre-wrap', marginBottom: 16 }}>{invoice.notes}</p>
           )}
 
-          <div className="flex items-end justify-between gap-6 pt-6 mt-4" style={{ borderTop: `1px solid ${LINE}` }}>
+          <div className="pt-6 mt-4" style={{ borderTop: `1px solid ${LINE}` }}>
             <p style={{ color: MUTED, fontSize: 11, maxWidth: 360 }}>
               {settings.statementFooterText}
               <br />
-              Electronically issued {fmtStamp(invoice.issuedAt ?? invoice.createdAt)}. Valid with the official digital seal; no wet-ink signature required.
+              Electronically issued {fmtStamp(invoice.issuedAt ?? invoice.createdAt)}.
             </p>
-            <div className="text-center shrink-0">
-              <img src="/seal-official.svg" alt="SafeGuard Securities official digital seal" style={{ width: 92, height: 92 }} />
-              <p style={{ fontSize: 9, letterSpacing: '.08em', textTransform: 'uppercase', color: MUTED }}>Official digital seal</p>
-            </div>
           </div>
         </div>
       </div>

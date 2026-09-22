@@ -7,6 +7,7 @@ import { getInvoiceById, markInvoiceEmailSent, type StaffInvoice } from '../../s
 import { getFundingDetails, type FundingDetails } from '../../services/investor/fundingDetailsService';
 import { getPlatformSettings, DEFAULTS as SETTINGS_DEFAULTS, type PlatformSettings } from '../../services/investor/settingsService';
 import { buildInvoiceEmailHtml, buildInvoiceEmailText, invoiceEmailSubject } from '../../services/investor/invoiceEmail';
+import { copyHtmlForEmail, copyHtmlSource } from '../../lib/copyHtmlForEmail';
 import { logAction } from '../../services/investor/auditService';
 import '../../styles/safeguardTheme.css';
 
@@ -38,7 +39,6 @@ export default function InvoiceEmailPreviewPage() {
       invoice,
       platformName: settings.platformName,
       logoUrl: `${window.location.origin}/logo-email.png`,
-      sealUrl: `${window.location.origin}/seal-official.svg`,
       portalUrl: `${window.location.origin}/invoice/${invoice.id}`,
       details,
     });
@@ -61,21 +61,38 @@ export default function InvoiceEmailPreviewPage() {
   }
 
   const subject = invoiceEmailSubject(invoice, settings.platformName);
+  const plain = buildInvoiceEmailText({ invoice, platformName: settings.platformName, details });
 
   const copyEmail = async () => {
     try {
-      const plain = buildInvoiceEmailText({ invoice, platformName: settings.platformName, details });
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([plain], { type: 'text/plain' }),
-        }),
-      ]);
+      const mode = await copyHtmlForEmail(html, plain);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
-      toast.success('Email copied — paste into your configured mail client');
+      toast.success(
+        mode === 'rich'
+          ? 'Invoice HTML copied — paste into a Thunderbird HTML compose window (Ctrl+V)'
+          : 'HTML source copied — in Thunderbird use Insert → HTML, then paste',
+      );
     } catch {
-      toast.error('Copy failed — your browser may not allow rich clipboard here');
+      toast.error('Copy failed');
+    }
+  };
+
+  const copySource = async () => {
+    try {
+      await copyHtmlSource(html);
+      toast.success('HTML source copied — Thunderbird: Insert → HTML, then paste');
+    } catch {
+      toast.error('Copy failed');
+    }
+  };
+
+  const copySubject = async () => {
+    try {
+      await navigator.clipboard.writeText(subject);
+      toast.success('Subject copied');
+    } catch {
+      toast.error('Copy failed');
     }
   };
 
@@ -84,8 +101,7 @@ export default function InvoiceEmailPreviewPage() {
       toast.error('No bill-to email on this invoice');
       return;
     }
-    const body = buildInvoiceEmailText({ invoice, platformName: settings.platformName, details });
-    window.location.href = `mailto:${encodeURIComponent(invoice.billToEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = `mailto:${encodeURIComponent(invoice.billToEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(plain)}`;
   };
 
   return (
@@ -99,7 +115,11 @@ export default function InvoiceEmailPreviewPage() {
           <div className="flex flex-wrap gap-2">
             <button type="button" className="sg-btn-primary flex items-center gap-2" onClick={copyEmail}>
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              Copy email (rich)
+              Copy HTML for Thunderbird
+            </button>
+            <button type="button" className="sg-action-btn flex items-center gap-2" onClick={copySource}>
+              <Copy className="h-4 w-4" />
+              Copy HTML source
             </button>
             <button type="button" className="sg-action-btn flex items-center gap-2" onClick={openMailto}>
               <Mail className="h-4 w-4" />
@@ -131,10 +151,11 @@ export default function InvoiceEmailPreviewPage() {
             To: <span className="sg-text-main">{invoice.billToEmail}</span>
           </p>
           <p style={{ color: 'var(--sg-muted)' }}>
-            Subject: <span className="sg-text-main">{subject}</span>
+            Subject: <span className="sg-text-main">{subject}</span>{' '}
+            <button type="button" className="sg-action-btn text-xs ml-2" onClick={copySubject}>Copy subject</button>
           </p>
           <p className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>
-            Automatic send uses the configured Resend mail client. For manual send: copy into Thunderbird (HTML compose) or open the mail app, then mark emailed.
+            Thunderbird: start a message in HTML compose (not plain text), then Ctrl+V. If you see raw tags, use Insert → HTML and paste the HTML source instead.
           </p>
         </div>
 

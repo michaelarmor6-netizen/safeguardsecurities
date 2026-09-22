@@ -57,11 +57,10 @@ export function buildInvoiceEmailHtml(params: {
   invoice: StaffInvoice;
   platformName: string;
   logoUrl: string;
-  sealUrl: string;
   portalUrl: string;
   details?: FundingDetails | null;
 }): string {
-  const { invoice, platformName, logoUrl, sealUrl, portalUrl, details } = params;
+  const { invoice, platformName, logoUrl, portalUrl, details } = params;
   const subtotal = formatInvoiceMoney(invoiceSubtotal(invoice.lineItems), invoice.currency);
   const tax = formatInvoiceMoney(invoiceTaxAmount(invoice.lineItems, invoice.taxRate), invoice.currency);
   const total = formatInvoiceMoney(invoiceTotal(invoice.lineItems, invoice.taxRate), invoice.currency);
@@ -75,9 +74,10 @@ export function buildInvoiceEmailHtml(params: {
   const itemRows = invoice.lineItems
     .map(
       (item) => `<tr>
-        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;">${esc(item.description)}</td>
-        <td style="padding:10px 8px;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;text-align:right;">${esc(item.quantity)}</td>
-        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#003d82;font-size:14px;text-align:right;">${esc(formatInvoiceMoney(item.quantity * item.unitPrice, invoice.currency))}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#101623;font-size:14px;">${esc(item.description)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #dddddd;color:#101623;font-size:14px;text-align:right;">${esc(item.quantity)}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #dddddd;color:#101623;font-size:14px;text-align:right;">${esc(formatInvoiceMoney(item.unitPrice, invoice.currency))}</td>
+        <td style="padding:10px 0;border-bottom:1px solid #dddddd;color:#101623;font-size:14px;text-align:right;font-weight:600;">${esc(formatInvoiceMoney(item.quantity * item.unitPrice, invoice.currency))}</td>
       </tr>`,
     )
     .join('');
@@ -104,44 +104,57 @@ export function buildInvoiceEmailHtml(params: {
 <title>${esc(platformName)} — Invoice ${esc(invoice.number)}</title></head>
 <body style="margin:0;padding:0;background-color:#f5f5f5;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5;"><tr><td align="center" style="padding:20px 10px;">
-<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;font-family:Arial,Helvetica,sans-serif;">
-  <tr><td style="padding:26px 30px;border-bottom:1px solid #e5e7eb;">
-    <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="48" style="height:48px;width:auto;display:block;border:0;" />
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#101623;">
+  <tr><td style="padding:26px 30px;border-bottom:2px solid #101623;">
+    <table width="100%"><tr>
+      <td valign="top">
+        <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="56" style="height:56px;width:auto;max-width:280px;display:block;border:0;" />
+        <div style="font-weight:700;margin-top:10px;">${esc(platformName)}</div>
+      </td>
+      <td valign="top" align="right">
+        <div style="font-size:22px;font-weight:800;letter-spacing:.08em;">INVOICE</div>
+        <div style="font-size:13px;color:#5b6472;">No. ${esc(invoice.number)}</div>
+        <div style="font-size:12px;color:#5b6472;margin-top:6px;">Issued ${esc(issued)}</div>
+      </td>
+    </tr></table>
   </td></tr>
-  <tr><td style="padding:36px 30px;">
-    <div style="font-size:18px;font-weight:600;color:#003d82;margin-bottom:8px;">Invoice ${esc(invoice.number)}</div>
-    <p style="color:#003d82;font-size:14px;line-height:1.7;margin:0 0 20px;">
-      Hello ${esc(invoice.billToName)}, please find your official ${esc(platformName)} invoice below.
-      This document is time-stamped and bears the firm digital seal.
-    </p>
-    <p style="font-size:13px;color:#5b6472;margin:0 0 22px;">Issued: ${esc(issued)}${due ? `<br/>Due: ${esc(due)}` : ''}</p>
-    <table width="100%" cellpadding="0" cellspacing="0">
+  <tr><td style="padding:24px 30px;">
+    <table width="100%"><tr>
+      <td valign="top" style="padding-right:16px;">
+        <div style="font-size:11px;color:#5b6472;text-transform:uppercase;letter-spacing:.06em;">Billed to</div>
+        <div style="font-weight:700;">${esc(invoice.billToName)}</div>
+        ${invoice.billToCompany ? `<div style="font-size:13px;">${esc(invoice.billToCompany)}</div>` : ''}
+        ${invoice.billToEmail ? `<div style="font-size:13px;color:#5b6472;">${esc(invoice.billToEmail)}</div>` : ''}
+        ${invoice.billToAddress ? `<div style="font-size:13px;color:#5b6472;white-space:pre-wrap;">${esc(invoice.billToAddress)}</div>` : ''}
+      </td>
+      <td valign="top" align="right" style="font-size:13px;">
+        <div>Currency: <strong>${esc(invoice.currency)}</strong></div>
+        ${due ? `<div>Due date: <strong>${esc(due)}</strong></div>` : ''}
+        ${invoice.paymentTerms ? `<div>Terms: <strong>${esc(invoice.paymentTerms)}</strong></div>` : ''}
+      </td>
+    </tr></table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:22px;">
       <tr style="color:#5b6472;font-size:12px;text-transform:uppercase;letter-spacing:.06em;">
-        <th align="left" style="padding-bottom:8px;">Description</th>
-        <th align="right" style="padding-bottom:8px;">Qty</th>
-        <th align="right" style="padding-bottom:8px;">Amount</th>
+        <th align="left" style="padding-bottom:8px;border-bottom:1px solid #d8dde5;">Description</th>
+        <th align="right" style="padding-bottom:8px;border-bottom:1px solid #d8dde5;">Qty</th>
+        <th align="right" style="padding-bottom:8px;border-bottom:1px solid #d8dde5;">Unit</th>
+        <th align="right" style="padding-bottom:8px;border-bottom:1px solid #d8dde5;">Amount</th>
       </tr>
       ${itemRows}
-      <tr><td colspan="2" style="padding-top:12px;text-align:right;color:#5b6472;font-size:13px;">Subtotal</td><td style="padding-top:12px;text-align:right;font-weight:600;color:#003d82;">${esc(subtotal)}</td></tr>
-      ${invoice.taxRate > 0 ? `<tr><td colspan="2" style="padding-top:4px;text-align:right;color:#5b6472;font-size:13px;">${esc(invoice.taxLabel)} (${esc(invoice.taxRate)}%)</td><td style="padding-top:4px;text-align:right;color:#003d82;">${esc(tax)}</td></tr>` : ''}
-      <tr><td colspan="2" style="padding-top:8px;text-align:right;font-weight:700;color:#003d82;">Total due</td><td style="padding-top:8px;text-align:right;font-size:20px;font-weight:800;color:#003d82;">${esc(total)}</td></tr>
+      <tr><td colspan="3" style="padding-top:12px;text-align:right;color:#5b6472;font-size:13px;">Subtotal</td><td style="padding-top:12px;text-align:right;font-weight:600;">${esc(subtotal)}</td></tr>
+      ${invoice.taxRate > 0 ? `<tr><td colspan="3" style="padding-top:4px;text-align:right;color:#5b6472;font-size:13px;">${esc(invoice.taxLabel)} (${esc(invoice.taxRate)}%)</td><td style="padding-top:4px;text-align:right;">${esc(tax)}</td></tr>` : ''}
+      <tr><td colspan="3" style="padding-top:8px;text-align:right;font-weight:700;">Total due</td><td style="padding-top:8px;text-align:right;font-size:20px;font-weight:800;">${esc(total)}</td></tr>
     </table>
     ${payBlock}
-    ${invoice.notes ? `<p style="color:#003d82;font-size:13px;white-space:pre-wrap;">${esc(invoice.notes)}</p>` : ''}
+    ${invoice.notes ? `<p style="color:#5b6472;font-size:13px;white-space:pre-wrap;">${esc(invoice.notes)}</p>` : ''}
     <table width="100%"><tr>
       <td align="center" style="padding:20px 0 8px;">
         <a href="${esc(portalUrl)}" style="display:inline-block;background:#003d82;color:#ffffff;padding:12px 32px;text-decoration:none;border-radius:4px;font-weight:600;font-size:14px;">View invoice in portal</a>
       </td>
     </tr></table>
-    <div style="text-align:center;margin-top:16px;">
-      <img src="${esc(sealUrl)}" alt="Official digital seal" width="96" height="96" style="width:96px;height:96px;opacity:.92;" />
-      <div style="font-size:10px;color:#5b6472;letter-spacing:.08em;text-transform:uppercase;">Official digital seal</div>
-    </div>
   </td></tr>
   <tr><td align="center" style="background:#f0f0f0;padding:24px;font-size:11px;color:#666;">
-    <img src="${esc(logoUrl)}" alt="" height="32" style="height:32px;width:auto;" /><br/>
-    ${esc(platformName)} · Confidential invoice · Do not forward<br/>
-    This invoice was issued electronically and is valid without a wet-ink signature.
+    ${esc(platformName)} · Confidential invoice
   </td></tr>
 </table>
 </td></tr></table>
