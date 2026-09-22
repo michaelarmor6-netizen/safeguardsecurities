@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Copy, Printer } from 'lucide-react';
+import { ArrowLeft, Copy, FileDown, Printer } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import { getInvoiceById, formatInvoiceMoney, invoiceSubtotal, invoiceTaxAmount, invoiceTotal, type StaffInvoice } from '../../services/investor/invoiceService';
 import { getFundingDetails, bankInstructionRows, paymentReasonLine, type FundingDetails } from '../../services/investor/fundingDetailsService';
 import { getPlatformSettings, DEFAULTS as SETTINGS_DEFAULTS, type PlatformSettings } from '../../services/investor/settingsService';
 import { buildInvoiceEmailHtml, buildInvoiceEmailText } from '../../services/investor/invoiceEmail';
 import { copyHtmlForEmail, copyHtmlSource } from '../../lib/copyHtmlForEmail';
+import { downloadInvoicePdf } from '../../services/investor/invoicePdf';
 import '../../styles/safeguardTheme.css';
 
 const INK = '#101623';
@@ -40,6 +41,7 @@ export default function StaffInvoicePage() {
   const [settings, setSettings] = useState<PlatformSettings>(SETTINGS_DEFAULTS);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     if (!user || !invoiceId) return;
@@ -107,21 +109,56 @@ export default function StaffInvoicePage() {
                 <button
                   type="button"
                   className="sg-btn-primary flex items-center gap-2"
+                  disabled={pdfBusy}
                   onClick={async () => {
+                    setPdfBusy(true);
                     try {
                       const mode = await copyHtmlForEmail(pasteHtml, pastePlain);
+                      const file = await downloadInvoicePdf({
+                        invoice,
+                        platformName: settings.platformName,
+                        logoUrl: `${window.location.origin}/logo-email.png`,
+                        details,
+                      });
                       toast.success(
                         mode === 'rich'
-                          ? 'Invoice copied — paste into Thunderbird HTML compose (Ctrl+V)'
-                          : 'HTML source copied — Thunderbird: Insert → HTML, then paste',
+                          ? `HTML copied and ${file} downloaded. In Thunderbird: Ctrl+V, then attach the PDF from Downloads.`
+                          : `${file} downloaded. Attach it in Thunderbird, then Insert → HTML for the body.`,
+                        { duration: 8000 },
                       );
-                    } catch {
-                      toast.error('Copy failed');
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'Could not prepare Thunderbird send');
+                    } finally {
+                      setPdfBusy(false);
                     }
                   }}
                 >
-                  <Copy className="h-4 w-4" />
-                  Copy HTML for Thunderbird
+                  <FileDown className="h-4 w-4" />
+                  {pdfBusy ? 'Preparing…' : 'HTML + PDF for Thunderbird'}
+                </button>
+                <button
+                  type="button"
+                  className="sg-action-btn flex items-center gap-2"
+                  disabled={pdfBusy}
+                  onClick={async () => {
+                    setPdfBusy(true);
+                    try {
+                      const file = await downloadInvoicePdf({
+                        invoice,
+                        platformName: settings.platformName,
+                        logoUrl: `${window.location.origin}/logo-email.png`,
+                        details,
+                      });
+                      toast.success(`${file} downloaded — attach it in Thunderbird with the paperclip`);
+                    } catch (e) {
+                      toast.error(e instanceof Error ? e.message : 'PDF failed');
+                    } finally {
+                      setPdfBusy(false);
+                    }
+                  }}
+                >
+                  <FileDown className="h-4 w-4" />
+                  Download PDF
                 </button>
                 <button
                   type="button"

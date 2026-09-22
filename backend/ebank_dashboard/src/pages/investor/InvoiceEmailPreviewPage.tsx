@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Check, Copy, Mail } from 'lucide-react';
+import { ArrowLeft, Check, Copy, FileDown, Mail } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import { getInvoiceById, markInvoiceEmailSent, type StaffInvoice } from '../../services/investor/invoiceService';
 import { getFundingDetails, type FundingDetails } from '../../services/investor/fundingDetailsService';
 import { getPlatformSettings, DEFAULTS as SETTINGS_DEFAULTS, type PlatformSettings } from '../../services/investor/settingsService';
 import { buildInvoiceEmailHtml, buildInvoiceEmailText, invoiceEmailSubject } from '../../services/investor/invoiceEmail';
 import { copyHtmlForEmail, copyHtmlSource } from '../../lib/copyHtmlForEmail';
+import { downloadInvoicePdf } from '../../services/investor/invoicePdf';
 import { logAction } from '../../services/investor/auditService';
 import '../../styles/safeguardTheme.css';
 
@@ -20,6 +21,7 @@ export default function InvoiceEmailPreviewPage() {
   const [settings, setSettings] = useState<PlatformSettings>(SETTINGS_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   useEffect(() => {
     if (!user || !invoiceId) return;
@@ -78,6 +80,48 @@ export default function InvoiceEmailPreviewPage() {
     }
   };
 
+  const downloadPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const file = await downloadInvoicePdf({
+        invoice,
+        platformName: settings.platformName,
+        logoUrl: `${window.location.origin}/logo-email.png`,
+        details,
+      });
+      toast.success(`${file} downloaded — attach it in Thunderbird with the paperclip`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'PDF failed');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
+  const prepareThunderbird = async () => {
+    setPdfBusy(true);
+    try {
+      const mode = await copyHtmlForEmail(html, plain);
+      const file = await downloadInvoicePdf({
+        invoice,
+        platformName: settings.platformName,
+        logoUrl: `${window.location.origin}/logo-email.png`,
+        details,
+      });
+      setCopied(true);
+      setTimeout(() => setCopied(false), 3000);
+      toast.success(
+        mode === 'rich'
+          ? `HTML copied and ${file} downloaded. Thunderbird: Ctrl+V in HTML compose, then attach the PDF.`
+          : `${file} downloaded. Attach it, then Insert → HTML for the body.`,
+        { duration: 8000 },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not prepare Thunderbird send');
+    } finally {
+      setPdfBusy(false);
+    }
+  };
+
   const copySource = async () => {
     try {
       await copyHtmlSource(html);
@@ -113,9 +157,17 @@ export default function InvoiceEmailPreviewPage() {
             Back
           </button>
           <div className="flex flex-wrap gap-2">
-            <button type="button" className="sg-btn-primary flex items-center gap-2" onClick={copyEmail}>
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              Copy HTML for Thunderbird
+            <button type="button" className="sg-btn-primary flex items-center gap-2" disabled={pdfBusy} onClick={prepareThunderbird}>
+              {copied ? <Check className="h-4 w-4" /> : <FileDown className="h-4 w-4" />}
+              {pdfBusy ? 'Preparing…' : 'HTML + PDF for Thunderbird'}
+            </button>
+            <button type="button" className="sg-action-btn flex items-center gap-2" disabled={pdfBusy} onClick={downloadPdf}>
+              <FileDown className="h-4 w-4" />
+              Download PDF
+            </button>
+            <button type="button" className="sg-action-btn flex items-center gap-2" onClick={copyEmail}>
+              <Copy className="h-4 w-4" />
+              Copy HTML only
             </button>
             <button type="button" className="sg-action-btn flex items-center gap-2" onClick={copySource}>
               <Copy className="h-4 w-4" />
@@ -155,7 +207,7 @@ export default function InvoiceEmailPreviewPage() {
             <button type="button" className="sg-action-btn text-xs ml-2" onClick={copySubject}>Copy subject</button>
           </p>
           <p className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>
-            Thunderbird: start a message in HTML compose (not plain text), then Ctrl+V. If you see raw tags, use Insert → HTML and paste the HTML source instead.
+            Thunderbird cannot receive an attachment from the browser. Download the PDF, compose in HTML, paste the body (Ctrl+V), then attach the file with the paperclip. If paste shows tags, use Insert → HTML.
           </p>
         </div>
 

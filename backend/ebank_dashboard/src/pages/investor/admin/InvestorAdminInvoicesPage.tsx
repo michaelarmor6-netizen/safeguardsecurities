@@ -19,6 +19,9 @@ import {
   type StaffInvoice,
 } from '../../../services/investor/invoiceService';
 import { logAction } from '../../../services/investor/auditService';
+import { getFundingDetails } from '../../../services/investor/fundingDetailsService';
+import { getPlatformSettings } from '../../../services/investor/settingsService';
+import { downloadInvoicePdf } from '../../../services/investor/invoicePdf';
 
 const clientLabel = (p: InvestorProfile) =>
   p.displayName?.trim() || [p.firstName, p.lastName].filter(Boolean).join(' ').trim() || p.email || p.id;
@@ -360,6 +363,32 @@ export default function InvestorAdminInvoicesPage() {
                 </td>
                 <td className="p-3 text-right space-x-2 whitespace-nowrap">
                   <button type="button" className="sg-action-btn text-xs" onClick={() => navigate(`/invoice/${inv.id}`)}>View</button>
+                  {canWrite && inv.status !== 'void' && (
+                    <button
+                      type="button"
+                      className="sg-action-btn text-xs"
+                      disabled={busyId === inv.id}
+                      onClick={async () => {
+                        setBusyId(inv.id);
+                        try {
+                          const [details, settings] = await Promise.all([getFundingDetails(), getPlatformSettings()]);
+                          const file = await downloadInvoicePdf({
+                            invoice: inv,
+                            platformName: settings.platformName,
+                            logoUrl: `${window.location.origin}/logo-email.png`,
+                            details,
+                          });
+                          toast.success(`${file} downloaded — attach in Thunderbird`);
+                        } catch (e) {
+                          toast.error(e instanceof Error ? e.message : 'PDF failed');
+                        } finally {
+                          setBusyId(null);
+                        }
+                      }}
+                    >
+                      PDF
+                    </button>
+                  )}
                   {canWrite && !inv.emailSentAt && inv.status !== 'void' && (
                     <button
                       type="button"
