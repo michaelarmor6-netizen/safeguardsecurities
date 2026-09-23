@@ -130,6 +130,17 @@ export function renderCampaignLanding(opts: {
       return;
     }
     btn.disabled = true;
+    if (typeof safeguardCaptureLead === 'function') {
+      safeguardCaptureLead({
+        track: ${JSON.stringify(slug)},
+        name: name, email: email,
+        website: document.getElementById('website').value,
+        dwellMs: Date.now() - t0,
+        page: location.href
+      }).then(function () { form.style.display = 'none'; ok.style.display = 'block'; })
+        .catch(function () { err.textContent = 'Could not save your request.'; err.style.display = 'block'; btn.disabled = false; });
+      return;
+    }
     fetch(${JSON.stringify(captureUrl)}, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

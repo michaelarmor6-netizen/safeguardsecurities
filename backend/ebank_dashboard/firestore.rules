@@ -208,7 +208,10 @@ service cloud.firestore {
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
       allow create: if isFinance() &&
         request.resource.data.createdByUid == request.auth.uid;
-      allow update: if isFinance();
+      allow update: if isFinance() ||
+        (request.auth != null && resource.data.userId == request.auth.uid &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt']));
       allow delete: if isSuperAdmin();
     }
 
@@ -323,7 +326,25 @@ service cloud.firestore {
     // suppression entries can be created and removed by staff, and phase 3
     // adds function-only writers (unsubscribe endpoint, bounce webhook).
     match /crmLeads/{leadId} {
-      allow read, write: if isInvestorAdmin();
+      allow read, update, delete: if isInvestorAdmin();
+      // Public landing-page intake. Cloud Functions are down when billing is
+      // off, so the Gold form writes here directly. Shape is locked so this
+      // cannot become a general write hole.
+      allow create: if request.auth == null
+        && request.resource.data.keys().hasOnly([
+          'firstName', 'lastName', 'company', 'phoneE164', 'email', 'country',
+          'tags', 'status', 'source', 'consentBasis', 'consentNote',
+          'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.firstName is string
+        && request.resource.data.firstName.size() > 0
+        && request.resource.data.firstName.size() <= 80
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 160
+        && request.resource.data.consentBasis == 'inquiry'
+        && request.resource.data.status == 'new'
+        && request.resource.data.source.kind == 'manual';
     }
     match /crmImports/{batchId} {
       allow read, create: if isInvestorAdmin();
@@ -468,6 +489,18 @@ service cloud.firestore {
     // user can dismiss a triggered alert from the UI without an admin.
     // In-app notices for clients (invoice issued, etc.). Finance writes them
     // when issuing an invoice; the owner may mark them read.
+    match /staffNotifications/{noticeId} {
+      allow read: if isInvestorAdmin();
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll(['type', 'title', 'body', 'href', 'read', 'createdAt', 'userId'])
+        && request.resource.data.type == 'invoice-payment'
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.read == false;
+      allow update: if isInvestorAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt']);
+      allow delete: if isInvestorAdmin();
+    }
+
     match /clientNotifications/{noticeId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());

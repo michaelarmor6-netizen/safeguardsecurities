@@ -83,8 +83,8 @@ export default function InvestorAdminTransactionsPage() {
         <div>
           <h1 className="sg-page-title">Transactions</h1>
           <p className="sg-page-sub mt-1">
-            Completed deposits - both client-requested and desk-recorded top-ups - with the
-            client's proof of payment. Requests still in progress live on Funding Requests.
+            Completed deposits and invoice payments the client has reported, with proof of
+            payment. Funding requests still in progress live on Funding Requests.
           </p>
         </div>
         <button type="button" className="sg-action-btn flex items-center gap-2" onClick={onExport}>
@@ -173,7 +173,7 @@ export default function InvestorAdminTransactionsPage() {
                 <td className="p-4 sg-text-muted font-mono text-xs whitespace-nowrap" data-label="Reference">{t.reference}</td>
                 <td className="p-4 sg-text-main" data-label="Client">{t.userEmail ?? t.userId}</td>
                 <td className="p-4 sg-text-muted capitalize" data-label="Type">
-                  {t.type}
+                  {t.type === 'invoice' ? 'Invoice' : t.type}
                   {/* A desk-recorded top-up has no client request and no proof
                       upload behind it - say who put it on the books instead. */}
                   {t.source === 'admin' && (
@@ -216,7 +216,7 @@ export default function InvestorAdminTransactionsPage() {
                   <button
                     type="button"
                     className="sg-action-btn"
-                    onClick={() => navigate(`/funding-invoice/${t.id}`)}
+                    onClick={() => navigate(t.type === 'invoice' ? `/invoice/${t.id}` : `/funding-invoice/${t.id}`)}
                   >
                     Invoice
                   </button>

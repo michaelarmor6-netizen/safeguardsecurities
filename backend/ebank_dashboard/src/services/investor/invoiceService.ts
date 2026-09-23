@@ -1,4 +1,5 @@
 import {
+  arrayUnion,
   collection,
   deleteField,
   doc,
@@ -7,11 +8,18 @@ import {
   orderBy,
   query,
   runTransaction,
+  setDoc,
   updateDoc,
   where,
   type DocumentData,
 } from 'firebase/firestore';
-import { auth, db } from '../../config/firebase';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { auth, db, storage } from '../../config/firebase';
+import {
+  PROOF_ACCEPT,
+  PROOF_MAX_BYTES,
+  type PaymentProof,
+} from './fundingService';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 import { getPlatformSettings, DEFAULTS } from './settingsService';
 
@@ -104,6 +112,9 @@ export interface StaffInvoice {
   createdByEmail: string;
   emailSentAt?: Date;
   emailError?: string;
+  paymentClaimedAt?: Date;
+  paymentProofs?: PaymentProof[];
+  paidAt?: Date;
 }
 
 export interface CreateInvoiceInput {
@@ -182,6 +193,18 @@ function mapInvoice(id: string, data: DocumentData): StaffInvoice {
     createdByEmail: data.createdByEmail ?? '',
     emailSentAt: data.emailSentAt?.toDate?.(),
     emailError: data.emailError,
+    paymentClaimedAt: data.paymentClaimedAt?.toDate?.(),
+    paymentProofs: Array.isArray(data.paymentProofs)
+      ? data.paymentProofs.map((p: DocumentData) => ({
+          name: String(p.name ?? 'receipt'),
+          url: String(p.url ?? ''),
+          path: String(p.path ?? ''),
+          size: Number(p.size ?? 0),
+          contentType: String(p.contentType ?? ''),
+          uploadedAt: p.uploadedAt?.toDate?.(),
+        }))
+      : [],
+    paidAt: data.paidAt?.toDate?.(),
   };
 }
 
@@ -199,12 +222,12 @@ export async function createStaffInvoice(input: CreateInvoiceInput): Promise<str
   const numbering = await getInvoiceNumbering();
   const counterRef = doc(db, 'counters', invoiceCounterId(numbering.includeYear, year));
   const invoiceRef = doc(collection(db, LIVE_COLLECTIONS.invoices));
+  let issuedNumber = '';
 
   await runTransaction(db, async (tx) => {
     const counterSnap = await tx.get(counterRef);
     const next = (counterSnap.exists() ? Number(counterSnap.data().value ?? 0) : 0) + 1;
     const number = formatInvoiceNumber(numbering, next, year);
-    const noticeRef = doc(collection(db, LIVE_COLLECTIONS.clientNotifications));
     tx.set(counterRef, { value: next });
     tx.set(invoiceRef, {
       number,
@@ -228,16 +251,21 @@ export async function createStaffInvoice(input: CreateInvoiceInput): Promise<str
       createdByUid: input.createdByUid,
       createdByEmail: input.createdByEmail,
     });
-    tx.set(noticeRef, {
+    issuedNumber = number;
+  });
+  try {
+    await setDoc(doc(collection(db, LIVE_COLLECTIONS.clientNotifications)), {
       userId: input.userId,
       type: 'invoice',
       title: 'New invoice',
-      body: `Invoice ${number} for ${formatInvoiceMoney(invoiceTotal(items, Number(input.taxRate) || 0), input.currency || 'USD')} has been issued to your account.`,
+      body: `Invoice ${issuedNumber} for ${formatInvoiceMoney(invoiceTotal(items, Number(input.taxRate) || 0), input.currency || 'USD')} has been issued to your account.`,
       href: `/invoice/${invoiceRef.id}`,
       read: false,
       createdAt: now,
     });
-  });
+  } catch (err) {
+    console.error('Invoice issued but notification write failed:', err);
+  }
   return invoiceRef.id;
 }
 
@@ -283,8 +311,74 @@ export async function markInvoiceEmailSent(id: string) {
 export async function markInvoicePaid(id: string) {
   await updateDoc(doc(db, LIVE_COLLECTIONS.invoices, id), {
     status: 'paid',
+    paidAt: new Date(),
     updatedAt: new Date(),
   });
+}
+
+export { PROOF_ACCEPT };
+
+export async function claimInvoicePayment(invoice: StaffInvoice): Promise<void> {
+  if (!invoice.id) throw new Error('Invoice is missing.');
+  const now = new Date();
+  await updateDoc(doc(db, LIVE_COLLECTIONS.invoices, invoice.id), {
+    paymentClaimedAt: now,
+    updatedAt: now,
+  });
+  try {
+    await setDoc(doc(collection(db, LIVE_COLLECTIONS.staffNotifications)), {
+      type: 'invoice-payment',
+      title: 'Invoice payment reported',
+      body: `${invoice.billToName || invoice.billToEmail} reported payment for ${invoice.number}.`,
+      href: '/admin/transactions',
+      invoiceId: invoice.id,
+      userId: invoice.userId,
+      read: false,
+      createdAt: now,
+    });
+  } catch (err) {
+    console.error('Invoice payment claimed but finance notice failed:', err);
+  }
+}
+
+function resolveProofContentType(file: File): string {
+  if (file.type && file.type !== 'application/octet-stream') return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'webp': return 'image/webp';
+    case 'gif': return 'image/gif';
+    case 'heic': return 'image/heic';
+    case 'heif': return 'image/heif';
+    case 'pdf': return 'application/pdf';
+    case 'doc': return 'application/msword';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    default: return file.type || 'application/octet-stream';
+  }
+}
+
+export async function uploadInvoicePaymentProof(
+  invoice: StaffInvoice,
+  userId: string,
+  file: File,
+): Promise<PaymentProof> {
+  if (file.size > PROOF_MAX_BYTES) {
+    throw new Error(`"${file.name}" is too large - files must be under 15MB.`);
+  }
+  const contentType = resolveProofContentType(file);
+  const safeName = file.name.replace(/[^\w.\- ]+/g, '_');
+  const path = `payment-proofs/${userId}/invoice-${invoice.id}/${Date.now()}_${safeName}`;
+  const fileRef = ref(storage, path);
+  await uploadBytes(fileRef, file, { contentType });
+  const url = await getDownloadURL(fileRef);
+  const proof: PaymentProof = { name: file.name, url, path, size: file.size, contentType, uploadedAt: new Date() };
+  await updateDoc(doc(db, LIVE_COLLECTIONS.invoices, invoice.id), {
+    paymentProofs: arrayUnion(proof),
+    updatedAt: new Date(),
+  });
+  return proof;
 }
 
 export async function voidInvoice(id: string) {

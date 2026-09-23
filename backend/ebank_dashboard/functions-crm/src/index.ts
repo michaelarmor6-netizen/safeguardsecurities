@@ -429,23 +429,25 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
     res.status(400).json({ error: 'That email address does not look right.' });
     return;
   }
-  const instrument = await db().collection('crmInstruments').doc(track).get();
-  const legacy = track === 'gold' || track === 'preipo' || track === 'gold-options';
-  if (!legacy && (!instrument.exists || instrument.data()?.status === 'archived')) {
-    res.status(400).json({ error: 'Unknown campaign track.' });
-    return;
-  }
-
-  const nameParts = name.split(/\s+/);
-  const firstName = nameParts[0] ?? '';
-  const lastName = nameParts.slice(1).join(' ');
-
   try {
+    const instrument = await db().collection('crmInstruments').doc(track).get();
+    const legacy = track === 'gold' || track === 'preipo' || track === 'gold-options';
+    if (!legacy && (!instrument.exists || instrument.data()?.status === 'archived')) {
+      res.status(400).json({ error: 'Unknown campaign track.' });
+      return;
+    }
+
+    const nameParts = name.split(/\s+/);
+    const firstName = nameParts[0] ?? '';
+    const lastName = nameParts.slice(1).join(' ');
+
     // A fresh form submission is fresh, explicit consent: clear any old
     // email suppression for this address and let the sequence restart.
     const sup = await db().collection('crmSuppression')
-      .where('value', '==', email).where('type', '==', 'email').get();
-    await Promise.all(sup.docs.map((d) => d.ref.delete()));
+      .where('value', '==', email).limit(20).get();
+    await Promise.all(
+      sup.docs.filter((d) => d.data()?.type === 'email').map((d) => d.ref.delete()),
+    );
 
     // One lead per email from this path - resubmits update, never duplicate.
     const existing = await db().collection('crmLeads')
@@ -477,25 +479,35 @@ export const leadCapture = onRequest({ cors: true }, async (req: Request, res: R
     // Auto-enroll into the newest ACTIVE campaign for this track. If none is
     // active the lead is still captured - the admin sees it on the Leads
     // page and can enroll by hand; the form never fails over campaign state.
-    const campaigns = await db().collection('crmCampaigns')
-      .where('track', '==', track).where('status', '==', 'active')
-      .orderBy('createdAt', 'desc').limit(1).get();
+    // Single-field query only so a missing composite index cannot 500 the form.
     let enrolled = false;
-    if (!campaigns.empty) {
-      const campaign = campaigns.docs[0];
-      const enrollRef = db().collection('crmEnrollments').doc(`${campaign.id}_${leadRef.id}`);
-      const already = await enrollRef.get();
-      if (!already.exists) {
-        await enrollRef.set({
-          campaignId: campaign.id, leadId: leadRef.id, email,
-          firstName: firstName || 'there',
-          step: 0, nextSendAt: Timestamp.now(), status: 'active',
-          funnelStage: 'sequenced',
-          enrolledAt: FieldValue.serverTimestamp(),
-        });
-        await campaign.ref.update({ 'stats.enrolled': FieldValue.increment(1) });
-        enrolled = true;
+    try {
+      const campaigns = await db().collection('crmCampaigns')
+        .where('track', '==', track).limit(40).get();
+      const campaign = campaigns.docs
+        .filter((d) => d.data()?.status === 'active')
+        .sort((a, b) => {
+          const ta = a.data()?.createdAt?.toMillis?.() ?? 0;
+          const tb = b.data()?.createdAt?.toMillis?.() ?? 0;
+          return tb - ta;
+        })[0];
+      if (campaign) {
+        const enrollRef = db().collection('crmEnrollments').doc(`${campaign.id}_${leadRef.id}`);
+        const already = await enrollRef.get();
+        if (!already.exists) {
+          await enrollRef.set({
+            campaignId: campaign.id, leadId: leadRef.id, email,
+            firstName: firstName || 'there',
+            step: 0, nextSendAt: Timestamp.now(), status: 'active',
+            funnelStage: 'sequenced',
+            enrolledAt: FieldValue.serverTimestamp(),
+          });
+          await campaign.ref.update({ 'stats.enrolled': FieldValue.increment(1) });
+          enrolled = true;
+        }
       }
+    } catch (enrollErr) {
+      console.error('leadCapture enroll skipped:', enrollErr);
     }
 
     console.log(`leadCapture: ${track} lead ${leadRef.id} (${existing.empty ? 'new' : 'returning'}, enrolled=${enrolled})`);

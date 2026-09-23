@@ -400,6 +400,7 @@
   </div>
 </footer>
 
+<script src="/campaign/lead-intake.js"></script>
 <script>
 (function () {
   var t0 = Date.now();
@@ -418,30 +419,19 @@
       return;
     }
     btn.disabled = true;
-    fetch('https://us-central1-e-bank-dashboard.cloudfunctions.net/leadCapture', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        track: 'gold',
-        name: name,
-        email: email,
-        phone: document.getElementById('phone').value.trim(),
-        website: document.getElementById('website').value,
-        dwellMs: Date.now() - t0,
-        page: location.href
-      })
-    }).then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
-      .then(function (res) {
-        if (res.s === 200) { form.style.display = 'none'; ok.style.display = 'block'; }
-        else {
-          err.textContent = (res.j && res.j.error) || 'Something went wrong — please try again.';
-          err.style.display = 'block'; btn.disabled = false;
-        }
-      })
-      .catch(function () {
-        err.textContent = 'Could not reach the server — please try again in a moment.';
-        err.style.display = 'block'; btn.disabled = false;
-      });
+    safeguardCaptureLead({
+      track: 'gold',
+      name: name,
+      email: email,
+      website: document.getElementById('website').value,
+      dwellMs: Date.now() - t0,
+      page: location.href
+    }).then(function () {
+      form.style.display = 'none'; ok.style.display = 'block';
+    }).catch(function () {
+      err.textContent = 'Could not save your request — please try again in a moment.';
+      err.style.display = 'block'; btn.disabled = false;
+    });
   });
 })();
 </script>

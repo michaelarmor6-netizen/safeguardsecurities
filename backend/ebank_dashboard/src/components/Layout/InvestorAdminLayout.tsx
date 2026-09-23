@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
+import FinanceNotificationBell from '../investor/FinanceNotificationBell';
 
 const nav = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -102,7 +103,10 @@ export default function InvestorAdminLayout() {
         >
           Admin
         </span>
-        <ThemeToggle className="ml-auto" />
+        <div className="ml-auto flex items-center gap-1">
+          <FinanceNotificationBell />
+          <ThemeToggle />
+        </div>
       </header>
 
       {navOpen && (
@@ -159,7 +163,10 @@ export default function InvestorAdminLayout() {
         </nav>
         <div className="p-4 border-t space-y-3" style={{ borderColor: 'var(--sg-border)' }}>
           {/* Already in the mobile header - showing it twice is just clutter. */}
-          <ThemeToggle className="w-full justify-center hidden lg:flex" />
+          <div className="hidden lg:flex items-center justify-between">
+            <FinanceNotificationBell />
+            <ThemeToggle />
+          </div>
           <p className="text-sm truncate" style={{ color: 'var(--sg-text)' }}>
             {profile?.email}
           </p>

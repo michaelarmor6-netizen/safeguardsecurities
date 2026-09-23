@@ -4,11 +4,12 @@ import toast from 'react-hot-toast';
 import { ArrowLeft, Copy, FileDown, Printer } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import { getInvoiceById, formatInvoiceMoney, invoiceSubtotal, invoiceTaxAmount, invoiceTotal, type StaffInvoice } from '../../services/investor/invoiceService';
-import { getFundingDetails, bankInstructionRows, paymentReasonLine, type FundingDetails } from '../../services/investor/fundingDetailsService';
+import { getFundingDetails, bankInstructionRows, type FundingDetails } from '../../services/investor/fundingDetailsService';
 import { getPlatformSettings, DEFAULTS as SETTINGS_DEFAULTS, type PlatformSettings } from '../../services/investor/settingsService';
 import { buildInvoiceEmailHtml, buildInvoiceEmailText } from '../../services/investor/invoiceEmail';
 import { copyHtmlForEmail, copyHtmlSource } from '../../lib/copyHtmlForEmail';
 import { downloadInvoicePdf } from '../../services/investor/invoicePdf';
+import InvoicePaymentInstructions from '../../components/investor/InvoicePaymentInstructions';
 import '../../styles/safeguardTheme.css';
 
 const INK = '#101623';
@@ -285,7 +286,7 @@ export default function StaffInvoicePage() {
                   ))}
                   <tr>
                     <td style={{ padding: '3px 16px 3px 0', color: MUTED }}>Reason for payment</td>
-                    <td style={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{paymentReasonLine(details, invoice.number)}</td>
+                    <td style={{ fontWeight: 600, fontFamily: 'ui-monospace, monospace' }}>{`Invoice ${invoice.number}`}</td>
                   </tr>
                 </tbody>
               </table>
@@ -305,6 +306,18 @@ export default function StaffInvoicePage() {
           </div>
         </div>
       </div>
+
+      {user && (
+        <div className="max-w-[820px] mx-auto mt-6 print:hidden">
+          <InvoicePaymentInstructions
+            invoice={invoice}
+            details={details}
+            userId={invoice.userId}
+            canAct={user.uid === invoice.userId}
+            onChanged={setInvoice}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -13,8 +13,9 @@
 // `type` so withdrawals/adjustments can join later without changing every call
 // site.
 import { getAllFundingRequests, requestReference, type FundingRequest, type PaymentProof } from './fundingService';
+import { getAllInvoices, invoiceTotal, type StaffInvoice } from './invoiceService';
 
-export type TransactionType = 'deposit';
+export type TransactionType = 'deposit' | 'invoice';
 
 export interface Transaction {
   /** Same id as the source funding request - the invoice route keys off it. */
@@ -37,6 +38,23 @@ export interface Transaction {
   note?: string;
   /** Which admin recorded it - only set on source==='admin'. */
   recordedByEmail?: string;
+}
+
+function toInvoiceTransaction(inv: StaffInvoice): Transaction {
+  return {
+    id: inv.id,
+    type: 'invoice',
+    reference: inv.number,
+    userId: inv.userId,
+    userEmail: inv.billToEmail,
+    amount: invoiceTotal(inv.lineItems, inv.taxRate),
+    completedAt: inv.paidAt ?? inv.paymentClaimedAt,
+    paymentClaimedAt: inv.paymentClaimedAt,
+    requestedAt: inv.issuedAt ?? inv.createdAt,
+    proofs: inv.paymentProofs ?? [],
+    source: 'client',
+    note: inv.status === 'paid' ? 'Invoice paid' : 'Invoice payment reported',
+  };
 }
 
 function toTransaction(f: FundingRequest): Transaction {
@@ -68,10 +86,14 @@ function toTransaction(f: FundingRequest): Transaction {
  * An approved row still awaiting payment is not a transaction, it's a promise.
  */
 export async function listTransactions(): Promise<Transaction[]> {
-  const requests = await getAllFundingRequests();
-  return requests
+  const [requests, invoices] = await Promise.all([getAllFundingRequests(), getAllInvoices()]);
+  const deposits = requests
     .filter((f) => f.status === 'funded' || (f.status === 'approved' && f.awaitingPayment !== true))
-    .map(toTransaction)
+    .map(toTransaction);
+  const invoicePays = invoices
+    .filter((inv) => inv.status !== 'void' && (inv.status === 'paid' || Boolean(inv.paymentClaimedAt)))
+    .map(toInvoiceTransaction);
+  return [...deposits, ...invoicePays]
     .sort((a, b) => (b.completedAt?.getTime() ?? 0) - (a.completedAt?.getTime() ?? 0));
 }
 

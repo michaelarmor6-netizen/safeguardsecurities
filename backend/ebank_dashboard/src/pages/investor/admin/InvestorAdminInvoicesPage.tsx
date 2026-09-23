@@ -351,7 +351,23 @@ export default function InvestorAdminInvoicesPage() {
                 </td>
                 <td className="p-3 text-right">{formatInvoiceMoney(invoiceTotal(inv.lineItems, inv.taxRate), inv.currency)}</td>
                 <td className="p-3 whitespace-nowrap">{inv.issuedAt?.toLocaleString() ?? '—'}</td>
-                <td className="p-3">{STATUS_LABEL[inv.status] ?? inv.status}</td>
+                <td className="p-3">
+                  {STATUS_LABEL[inv.status] ?? inv.status}
+                  {inv.paymentClaimedAt && inv.status !== 'paid' && (
+                    <div className="text-[11px] mt-0.5" style={{ color: 'var(--sg-teal)' }}>
+                      Client reported payment {inv.paymentClaimedAt.toLocaleDateString()}
+                    </div>
+                  )}
+                  {(inv.paymentProofs?.length ?? 0) > 0 && (
+                    <div className="mt-1 space-y-0.5">
+                      {inv.paymentProofs!.map((p, i) => (
+                        <a key={i} href={p.url} target="_blank" rel="noreferrer" className="block text-[11px] underline" style={{ color: 'var(--sg-gold)' }}>
+                          {p.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </td>
                 <td className="p-3 text-xs" style={{ color: 'var(--sg-muted)' }}>
                   {inv.emailSentAt
                     ? `Sent ${inv.emailSentAt.toLocaleString()}`

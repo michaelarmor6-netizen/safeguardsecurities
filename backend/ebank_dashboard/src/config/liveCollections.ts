@@ -6,6 +6,7 @@ export const LIVE_COLLECTIONS = {
   fundingRequests: 'fundingRequests',
   invoices: 'invoices',
   clientNotifications: 'clientNotifications',
+  staffNotifications: 'staffNotifications',
   orders: 'adminOrders',
   priceAlerts: 'priceAlerts',
   trades: 'trades',
