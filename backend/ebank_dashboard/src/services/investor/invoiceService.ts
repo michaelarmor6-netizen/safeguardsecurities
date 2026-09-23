@@ -204,6 +204,7 @@ export async function createStaffInvoice(input: CreateInvoiceInput): Promise<str
     const counterSnap = await tx.get(counterRef);
     const next = (counterSnap.exists() ? Number(counterSnap.data().value ?? 0) : 0) + 1;
     const number = formatInvoiceNumber(numbering, next, year);
+    const noticeRef = doc(collection(db, LIVE_COLLECTIONS.clientNotifications));
     tx.set(counterRef, { value: next });
     tx.set(invoiceRef, {
       number,
@@ -227,6 +228,15 @@ export async function createStaffInvoice(input: CreateInvoiceInput): Promise<str
       createdByUid: input.createdByUid,
       createdByEmail: input.createdByEmail,
     });
+    tx.set(noticeRef, {
+      userId: input.userId,
+      type: 'invoice',
+      title: 'New invoice',
+      body: `Invoice ${number} for ${formatInvoiceMoney(invoiceTotal(items, Number(input.taxRate) || 0), input.currency || 'USD')} has been issued to your account.`,
+      href: `/invoice/${invoiceRef.id}`,
+      read: false,
+      createdAt: now,
+    });
   });
   return invoiceRef.id;
 }
@@ -242,14 +252,23 @@ export async function getAllInvoices(): Promise<StaffInvoice[]> {
 }
 
 export async function getInvoicesForUser(userId: string): Promise<StaffInvoice[]> {
-  const snap = await getDocs(
-    query(
-      collection(db, LIVE_COLLECTIONS.invoices),
-      where('userId', '==', userId),
-      orderBy('createdAt', 'desc'),
-    ),
-  );
-  return snap.docs.map((d) => mapInvoice(d.id, d.data()));
+  try {
+    const snap = await getDocs(
+      query(
+        collection(db, LIVE_COLLECTIONS.invoices),
+        where('userId', '==', userId),
+        orderBy('createdAt', 'desc'),
+      ),
+    );
+    return snap.docs.map((d) => mapInvoice(d.id, d.data()));
+  } catch {
+    const snap = await getDocs(
+      query(collection(db, LIVE_COLLECTIONS.invoices), where('userId', '==', userId)),
+    );
+    return snap.docs
+      .map((d) => mapInvoice(d.id, d.data()))
+      .sort((a, b) => (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0));
+  }
 }
 
 export async function markInvoiceEmailSent(id: string) {

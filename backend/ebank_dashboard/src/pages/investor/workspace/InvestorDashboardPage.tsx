@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
-import { ArrowDownRight, ArrowUpRight, Sparkles, TrendingUp } from 'lucide-react';
+import { useNavigate, useOutletContext } from 'react-router-dom';
+import { ArrowDownRight, ArrowUpRight, FileText, Sparkles, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
+import { formatInvoiceMoney, getInvoicesForUser, invoiceTotal, type StaffInvoice } from '../../../services/investor/invoiceService';
 import {
   getPortfolioStatsForUser,
   getUserPortfolio,
@@ -85,11 +86,13 @@ function HoldingCard({ holding }: { holding: PortfolioHolding }) {
 
 export default function InvestorDashboardPage() {
   const { user } = useInvestorAuth();
+  const navigate = useNavigate();
   const { displayName } = useOutletContext<{ displayName: string }>();
   const [stats, setStats] = useState<PortfolioStats | null>(null);
   const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
   const [walletBalance, setWalletBalance] = useState(0);
   const [history, setHistory] = useState<PortfolioSnapshot[]>([]);
+  const [invoices, setInvoices] = useState<StaffInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [chartRange, setChartRange] = useState<'7D' | '30D' | '90D' | '1Y'>('30D');
 
@@ -100,12 +103,14 @@ export default function InvestorDashboardPage() {
       getPortfolioStatsForUser(user.uid),
       getUserWallet(user.uid),
       getPortfolioHistory(user.uid),
+      getInvoicesForUser(user.uid).catch(() => [] as StaffInvoice[]),
     ])
-      .then(([h, s, w, hist]) => {
+      .then(([h, s, w, hist, inv]) => {
         setHoldings(h);
         setStats(s);
         setWalletBalance(w?.balance ?? 0);
         setHistory(hist);
+        setInvoices(inv.filter((i) => i.status !== 'void').slice(0, 3));
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load portfolio'))
       .finally(() => setLoading(false));
@@ -285,6 +290,37 @@ export default function InvestorDashboardPage() {
           </div>
         )}
       </div>
+
+      {invoices.length > 0 && (
+        <div className="sg-card p-5" style={{ borderRadius: 14 }}>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <FileText className="h-5 w-5" style={{ color: 'var(--sg-indigo)' }} />
+              <h3 className="font-semibold" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
+                Recent invoices
+              </h3>
+            </div>
+            <button type="button" className="sg-action-btn text-xs" onClick={() => navigate('/workspace/invoices')}>
+              View all
+            </button>
+          </div>
+          <div className="space-y-2">
+            {invoices.map((inv) => (
+              <button
+                key={inv.id}
+                type="button"
+                className="w-full flex items-center justify-between gap-3 text-left px-3 py-2 rounded-[10px] text-sm"
+                style={{ background: 'var(--sg-bg)', color: 'var(--sg-text)' }}
+                onClick={() => navigate(`/invoice/${inv.id}`)}
+              >
+                <span className="font-mono">{inv.number}</span>
+                <span style={{ color: 'var(--sg-muted)' }}>{inv.issuedAt?.toLocaleDateString() ?? '—'}</span>
+                <span className="font-medium">{formatInvoiceMoney(invoiceTotal(inv.lineItems, inv.taxRate), inv.currency)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <h3 className="font-semibold mb-4" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>

@@ -466,6 +466,19 @@ service cloud.firestore {
     // transition is normally written by refreshAssetQuotes via the Admin
     // SDK (bypasses these rules), but "seen" is also client-settable so a
     // user can dismiss a triggered alert from the UI without an admin.
+    // In-app notices for clients (invoice issued, etc.). Finance writes them
+    // when issuing an invoice; the owner may mark them read.
+    match /clientNotifications/{noticeId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if isFinance() &&
+        request.resource.data.keys().hasAll(['userId', 'type', 'title', 'body', 'href', 'read', 'createdAt']);
+      allow update: if request.auth != null &&
+        resource.data.userId == request.auth.uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read', 'updatedAt']);
+      allow delete: if isInvestorAdmin();
+    }
+
     match /priceAlerts/{alertId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());

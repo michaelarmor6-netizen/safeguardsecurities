@@ -33,6 +33,7 @@ import { getPlatformSettings, type PlatformSettings } from '../../services/inves
 import { SETTINGS_NAV, DEFAULT_SETTINGS_SECTION } from '../../lib/settingsNav';
 import { getAlertsForUser } from '../../services/investor/priceAlertService';
 import ThemeToggle from '../ui/ThemeToggle';
+import ClientNotificationBell from '../investor/ClientNotificationBell';
 
 const mainNav = [
   { to: '/workspace/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -414,18 +415,19 @@ export default function InvestorWorkspaceLayout() {
                   : <Lock className="h-3.5 w-3.5" style={{ color: 'var(--sg-gold)' }} />}
                 Trade Desk
               </button>
-              <button
-                type="button"
-                onClick={() => navigate('/workspace/alerts')}
-                className="relative p-2"
-                style={{ color: 'var(--sg-muted)' }}
-                title="Price alerts"
-              >
-                <Bell className="h-4 w-4" />
-                {unseenAlerts > 0 && (
+              <ClientNotificationBell />
+              {unseenAlerts > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/workspace/alerts')}
+                  className="relative p-2"
+                  style={{ color: 'var(--sg-muted)' }}
+                  title="Price alerts"
+                >
+                  <Bell className="h-4 w-4" />
                   <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-red-500" />
-                )}
-              </button>
+                </button>
+              )}
               <div className="flex items-center gap-2 pl-2 border-l" style={{ borderColor: 'var(--sg-border)' }}>
                 <div
                   className="h-8 w-8 rounded-full flex items-center justify-center text-sm font-semibold text-white"

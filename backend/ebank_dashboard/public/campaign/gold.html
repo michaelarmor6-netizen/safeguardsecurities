@@ -35,11 +35,15 @@
     position: sticky; top: 0; z-index: 20;
     background: rgba(7, 18, 31, 0.92);
     backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(196, 163, 90, 0.18);
+    border-bottom: 1px solid rgba(196, 163, 90, 0.28);
   }
-  .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 14px 0; gap: 12px; }
-  .brand { color: #fff; font-weight: 700; letter-spacing: 0.04em; font-size: 14px; }
-  .brand span { color: var(--gold-2); }
+  .nav-inner { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; gap: 16px; }
+  .brand {
+    display: flex; align-items: center; text-decoration: none; flex-shrink: 0;
+  }
+  .brand img {
+    height: 38px; width: auto; max-width: min(240px, 52vw); display: block;
+  }
   .nav-links { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
   .nav-links a { color: #c8d4da; text-decoration: none; font-size: 13px; }
   .nav-links a:hover { color: var(--gold-2); }
@@ -58,9 +62,9 @@
       radial-gradient(800px 400px at 90% 10%, rgba(42, 157, 143, 0.12), transparent 45%),
       linear-gradient(180deg, #07121f 0%, #0e2236 100%);
     color: #fff;
-    padding: 56px 0 72px;
+    padding: 64px 0 80px;
   }
-  .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 40px; align-items: start; }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 48px; align-items: start; }
   .tag { color: var(--gold-2); font-size: 11px; letter-spacing: 0.22em; font-weight: 700; }
   h1, h2, h3 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; line-height: 1.15; }
   h1 { font-size: clamp(36px, 5vw, 58px); margin: 14px 0 18px; }
@@ -73,10 +77,11 @@
     background: var(--paper);
     color: var(--ink);
     border-radius: 18px;
-    padding: 28px 26px 24px;
+    padding: 26px 26px 22px;
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
     border: 1px solid rgba(196, 163, 90, 0.35);
   }
+  .form-logo { height: 36px; width: auto; max-width: 220px; margin-bottom: 14px; display: block; }
   .form-card h2 { font-size: 28px; margin-bottom: 6px; color: var(--navy); }
   .form-card > p { color: var(--muted); font-size: 14px; margin-bottom: 16px; }
   label { display: block; font-size: 12px; font-weight: 700; margin: 12px 0 5px; letter-spacing: 0.04em; text-transform: uppercase; color: #4a5560; }
@@ -98,8 +103,8 @@
   .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); }
   .stat { padding: 22px 8px; text-align: center; border-right: 1px solid var(--line); }
   .stat:last-child { border-right: 0; }
-  .stat b { display: block; font-family: "Cormorant Garamond", serif; font-size: 26px; color: var(--navy); }
-  .stat span { font-size: 12px; color: var(--muted); }
+  .stat b { display: block; font-family: "Cormorant Garamond", serif; font-size: 28px; color: var(--navy); font-weight: 600; }
+  .stat span { font-size: 12.5px; color: var(--muted); }
   section { padding: 72px 0; }
   .section-kicker { color: var(--gold); font-size: 11px; letter-spacing: 0.2em; font-weight: 700; }
   h2 { font-size: clamp(28px, 4vw, 40px); color: var(--navy); margin: 8px 0 14px; }
@@ -135,13 +140,22 @@
     color: #fff;
   }
   .cta-band h2 { color: #fff; }
-  footer { background: var(--navy); color: #9fb2bc; padding: 36px 0 44px; font-size: 12px; }
-  footer p { max-width: 860px; margin-bottom: 10px; }
-  footer a { color: var(--gold-2); }
+  footer { background: #050d16; color: #9fb2bc; padding: 40px 0 28px; font-size: 12.5px; border-top: 1px solid rgba(196, 163, 90, 0.22); }
+  .foot-top {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 28px; flex-wrap: wrap;
+    margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .foot-brand img { height: 42px; width: auto; max-width: 260px; display: block; }
+  .foot-meta { display: grid; gap: 6px; text-align: right; }
+  .foot-meta a { color: var(--gold-2); text-decoration: none; }
+  .foot-meta a:hover { text-decoration: underline; }
+  footer .legal { max-width: 920px; line-height: 1.6; margin-bottom: 12px; }
+  footer .copy { color: #7a8d97; }
   @media (max-width: 900px) {
     .hero-grid, .cards, .split, .stats-grid { grid-template-columns: 1fr; }
     .stat { border-right: 0; border-bottom: 1px solid var(--line); }
     .nav-links a:not(.btn) { display: none; }
+    .foot-meta { text-align: left; }
     table.compare { display: block; overflow-x: auto; }
   }
 </style>
@@ -149,7 +163,9 @@
 <body>
 <nav class="nav">
   <div class="wrap nav-inner">
-    <div class="brand">SAFEGUARD <span>SECURITIES</span></div>
+    <a class="brand" href="https://safeguardsecurities.us" aria-label="SafeGuard Securities, Inc.">
+      <img src="/safeguard-logo.svg" alt="SafeGuard Securities, Inc.">
+    </a>
     <div class="nav-links">
       <a href="#why">Why gold</a>
       <a href="#ways">How to hold it</a>
@@ -177,6 +193,7 @@
       </div>
     </div>
     <div class="form-card" id="register">
+      <img class="form-logo" src="/logo-email.png" alt="SafeGuard Securities, Inc.">
       <h2>See it before you fund it</h2>
       <p>Four short emails on how experienced investors approach gold — then a demo of the same screens our clients use.</p>
       <form id="lead-form" novalidate>
@@ -368,8 +385,18 @@
 
 <footer>
   <div class="wrap">
-    <p>Investing involves risk, including the possible loss of the amount you commit. Nothing on this page is a recommendation or a guarantee of performance; markets move both ways. Demo accounts use simulated funds and simulated results, which do not predict live outcomes. Consider your objectives and, where appropriate, seek independent advice before investing.</p>
-    <p>&copy; SafeGuard Securities · <a href="https://safeguardsecurities.us">safeguardsecurities.us</a> · <a href="mailto:info@safeguardsecurities.us">info@safeguardsecurities.us</a></p>
+    <div class="foot-top">
+      <a class="foot-brand" href="https://safeguardsecurities.us" aria-label="SafeGuard Securities, Inc.">
+        <img src="/safeguard-logo.svg" alt="SafeGuard Securities, Inc.">
+      </a>
+      <div class="foot-meta">
+        <a href="https://safeguardsecurities.us">safeguardsecurities.us</a>
+        <a href="mailto:info@safeguardsecurities.us">info@safeguardsecurities.us</a>
+        <a href="tel:+19379821491">+1 937 982 1491</a>
+      </div>
+    </div>
+    <p class="legal">Investing involves risk, including the possible loss of the amount you commit. Nothing on this page is a recommendation or a guarantee of performance; markets move both ways. Demo accounts use simulated funds and simulated results, which do not predict live outcomes. Consider your objectives and, where appropriate, seek independent advice before investing.</p>
+    <p class="copy">&copy; SafeGuard Securities, Inc. All rights reserved.</p>
   </div>
 </footer>
 
