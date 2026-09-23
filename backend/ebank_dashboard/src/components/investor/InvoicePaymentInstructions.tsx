@@ -197,8 +197,9 @@ export default function InvoicePaymentInstructions({
             setClaiming(true);
             try {
               await claimInvoicePayment(invoice);
-              refresh({ paymentClaimedAt: new Date() });
-              toast.success("Thanks — finance has been notified that this invoice is paid.");
+              const now = new Date();
+              refresh({ paymentClaimedAt: now, status: 'paid', paidAt: now });
+              toast.success("Thanks — this invoice is marked paid and recorded in transactions.");
             } catch (e) {
               toast.error(e instanceof Error ? e.message : 'Failed — please try again');
             } finally {

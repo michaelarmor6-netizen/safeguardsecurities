@@ -108,7 +108,9 @@ export function buildInvoiceEmailHtml(params: {
   <tr><td style="padding:26px 30px;border-bottom:2px solid #101623;">
     <table width="100%"><tr>
       <td valign="top">
-        <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="56" style="height:56px;width:auto;max-width:280px;display:block;border:0;" />
+        <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+          <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="56" style="height:56px;width:auto;max-width:280px;display:block;border:0;" />
+        </a>
         <div style="font-weight:700;margin-top:10px;">${esc(platformName)}</div>
       </td>
       <td valign="top" align="right">

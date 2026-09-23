@@ -265,7 +265,9 @@ function buildMail({ invoice, invoiceId, details, platformName, appUrl }) {
 <table width="100%"><tr><td align="center" style="padding:20px 10px;">
 <table width="600" style="max-width:600px;width:100%;background:#fff;font-family:Arial,Helvetica,sans-serif;">
   <tr><td style="padding:26px 30px;border-bottom:1px solid #e5e7eb;">
-    <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="56" style="height:56px;width:auto;max-width:280px;border:0;" />
+    <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+      <img src="${esc(logoUrl)}" alt="${esc(platformName)}" height="56" style="height:56px;width:auto;max-width:280px;border:0;" />
+    </a>
   </td></tr>
   <tr><td style="padding:36px 30px;color:#003d82;">
     <div style="font-size:18px;font-weight:600;">Invoice ${esc(number)}</div>
@@ -283,7 +285,9 @@ function buildMail({ invoice, invoiceId, details, platformName, appUrl }) {
     </div>
   </td></tr>
   <tr><td align="center" style="background:#f0f0f0;padding:24px;font-size:11px;color:#666;">
-    <img src="${esc(logoUrl)}" alt="" height="32" /><br/>
+    <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+      <img src="${esc(logoUrl)}" alt="" height="32" />
+    </a><br/>
     ${esc(platformName)} · Confidential invoice · Electronically issued
   </td></tr>
 </table></td></tr></table></body></html>`;

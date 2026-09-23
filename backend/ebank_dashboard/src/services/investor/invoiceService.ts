@@ -323,6 +323,8 @@ export async function claimInvoicePayment(invoice: StaffInvoice): Promise<void> 
   const now = new Date();
   await updateDoc(doc(db, LIVE_COLLECTIONS.invoices, invoice.id), {
     paymentClaimedAt: now,
+    status: 'paid',
+    paidAt: now,
     updatedAt: now,
   });
   try {

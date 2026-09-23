@@ -211,7 +211,14 @@ service cloud.firestore {
       allow update: if isFinance() ||
         (request.auth != null && resource.data.userId == request.auth.uid &&
          request.resource.data.diff(resource.data).affectedKeys()
-           .hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt']));
+           .hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt'])) ||
+        (request.auth != null && resource.data.userId == request.auth.uid &&
+         resource.data.status in ['issued', 'sent'] &&
+         request.resource.data.status == 'paid' &&
+         request.resource.data.number == resource.data.number &&
+         request.resource.data.userId == resource.data.userId &&
+         request.resource.data.diff(resource.data).affectedKeys()
+           .hasOnly(['paymentClaimedAt', 'paymentProofs', 'updatedAt', 'status', 'paidAt']));
       allow delete: if isSuperAdmin();
     }
 

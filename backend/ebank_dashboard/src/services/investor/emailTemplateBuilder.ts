@@ -170,7 +170,7 @@ export function buildBrandedEmail(input: BrandedEmailInput): string {
               <table width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
                   <td align="left" valign="middle">
-                    <a href="${SITE}" style="text-decoration:none;">
+                    <a href="${SITE}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
                       <img src="${escapeHtml(logo)}" width="160" alt="${COMPANY}" style="display:block; width:160px; height:auto; border:0;">
                     </a>
                   </td>

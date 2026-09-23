@@ -296,7 +296,9 @@ export function generateInvestorWelcomeEmailHtml(v: InvestorAccountEmailVariable
         <!-- Header -->
         <div class="header">
             <div class="header-left">
-                <img src="${logo}" alt="${COMPANY_NAME}" class="logo-img" />
+                <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+                  <img src="${logo}" alt="${COMPANY_NAME}" class="logo-img" />
+                </a>
             </div>
         </div>
 

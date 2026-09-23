@@ -243,7 +243,9 @@ export function buildFundingEmailHtml(p: FundingEmailHtmlParams): string {
 <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f5f5f5;"><tr><td align="center" style="padding:20px 10px;">
 <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;font-family:Arial,Helvetica,sans-serif;line-height:1.6;">
   <tr><td align="left" style="padding:26px 30px;border-bottom:1px solid #e5e7eb;">
-    <img src="${escHtml(p.logoUrl)}" alt="${escHtml(p.platformName)}" height="48" style="height:48px;width:auto;display:block;border:0;" />
+    <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+      <img src="${escHtml(p.logoUrl)}" alt="${escHtml(p.platformName)}" height="48" style="height:48px;width:auto;display:block;border:0;" />
+    </a>
   </td></tr>
   <tr><td style="padding:40px 30px;">
     <div style="font-size:18px;font-weight:600;color:#003d82;margin-bottom:20px;">Hello, ${escHtml(p.clientName)}!</div>
@@ -279,7 +281,9 @@ export function buildFundingEmailHtml(p: FundingEmailHtmlParams): string {
     </div>
   </td></tr>
   <tr><td align="center" style="background-color:#f0f0f0;padding:30px;border-top:1px solid #dddddd;font-size:12px;color:#003d82;">
-    <img src="${escHtml(p.logoUrl)}" alt="${escHtml(p.platformName)}" height="36" style="height:36px;width:auto;border:0;" /><br>
+    <a href="https://safeguardsecurities.us" target="_blank" rel="noopener noreferrer" style="text-decoration:none;border:0;">
+      <img src="${escHtml(p.logoUrl)}" alt="${escHtml(p.platformName)}" height="36" style="height:36px;width:auto;border:0;" />
+    </a><br>
     <div style="font-weight:600;margin:12px 0 5px;">Contact Information</div>
     <div style="margin:8px 0;font-size:13px;">
       <strong>Address:</strong> ${escHtml(d.companyAddress)}<br>
