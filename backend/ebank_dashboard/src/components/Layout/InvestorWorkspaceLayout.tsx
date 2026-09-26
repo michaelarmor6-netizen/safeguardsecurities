@@ -100,12 +100,21 @@ function formatTickerPrice(price: number): string {
  * panel. Opens on hover and on keyboard focus, and closes on Escape.
  */
 function SettingsFlyout() {
+  const location = useLocation();
+  const onSettings = location.pathname.startsWith('/workspace/settings');
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement | null>(null);
   const closeTimer = useRef<number | undefined>(undefined);
 
+  // The Settings page already has the same sections as a tab strip. Opening
+  // this menu there paints it on top of that strip and the form.
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname]);
+
   const show = () => {
+    if (onSettings) return;
     window.clearTimeout(closeTimer.current);
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
@@ -154,12 +163,12 @@ function SettingsFlyout() {
         // on a phone lands past the viewport. Tapping Settings navigates to the
         // default section instead, which is the useful outcome anyway.
         <div
-          className="hidden lg:block fixed z-50 w-60 p-3 space-y-4 shadow-xl"
+          className="hidden lg:block fixed z-[80] w-60 p-3 space-y-4 shadow-xl"
           style={{
             top: anchor.top,
             left: anchor.left,
             borderRadius: 12,
-            background: 'var(--sg-bg-elevated)',
+            background: 'var(--sg-bg-panel)',
             border: '1px solid var(--sg-border-strong)',
           }}
           onMouseEnter={show}
@@ -289,7 +298,7 @@ export default function InvestorWorkspaceLayout() {
         <aside
           className={`fixed inset-y-0 left-0 z-50 w-56 max-w-[80vw] border-r flex flex-col
             transition-transform duration-200 ease-out
-            lg:static lg:z-auto lg:translate-x-0 lg:max-w-none lg:shrink-0
+            lg:static lg:z-auto lg:transform-none lg:max-w-none lg:shrink-0
             ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}
           style={{ borderColor: 'var(--sg-border)', background: 'var(--sg-bg-panel)' }}
         >
