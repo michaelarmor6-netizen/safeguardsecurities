@@ -158,7 +158,7 @@ const SignupPage: React.FC = () => {
             ) : (
               <div className="w-full h-24 flex items-center justify-center">
                 <img 
-                  src="/sglogo.png"
+                  src="/logo.png"
                   alt="Logo"
                   className="w-full h-24 object-contain"
                 />

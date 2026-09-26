@@ -27,6 +27,10 @@ jobs:
 
       - name: Build dashboard
         working-directory: backend/ebank_dashboard
+        env:
+          # Investor platform. Without this, a checkout that has no .env
+          # builds the older bank dashboard and replaces the live site.
+          VITE_APP_MODE: safeguard
         run: npm run build
 
       - name: Authenticate to Google Cloud

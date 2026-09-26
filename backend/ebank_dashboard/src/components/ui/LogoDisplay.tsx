@@ -75,10 +75,6 @@ const LogoDisplay: React.FC<LogoDisplayProps> = ({
         src={logoSrc}
         alt={companyName}
         className={className}
-        onLoad={() => {
-          console.log('✅ LogoDisplay: Logo loaded successfully');
-          setImageError(false);
-        }}
         onError={(e) => {
           console.error('❌ LogoDisplay: Logo failed to load, falling back to icon:', e);
           setImageError(true);

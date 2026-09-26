@@ -39,4 +39,7 @@ export const LIVE_COLLECTIONS = {
   crmSources: 'crmSources',
 } as const;
 
-export const isSafeguardMode = import.meta.env.VITE_APP_MODE === 'safeguard';
+// The investor platform is the live app. The older bank dashboard is opt-in
+// (VITE_APP_MODE=bank). An unset flag must not replace the live site with it:
+// the GitHub hosting build has no .env file, and that shipped the bank login.
+export const isSafeguardMode = import.meta.env.VITE_APP_MODE !== 'bank';
