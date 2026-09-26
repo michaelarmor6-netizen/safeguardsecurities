@@ -8,6 +8,8 @@ import { getKycSubmissionsForUser, type KycSubmission } from '../../../../servic
 import { getUserPortfolio, getPortfolioStatsForUser, PORTFOLIO_MARK_REFRESH_MS, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
 import { getPortfolioHistory, type PortfolioSnapshot } from '../../../../services/investor/portfolioHistoryService';
 import { getTradesForUser, type Trade } from '../../../../services/investor/tradesService';
+import { correctPositionTerms } from '../../../../services/investor/tradingService';
+import { logAction } from '../../../../services/investor/auditService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { isPlatformAdmin } from '../../../../lib/investorRoles';
 import PortfolioMiniChart from '../../../../components/investor/PortfolioMiniChart';
@@ -36,6 +38,92 @@ const tileStyle: React.CSSProperties = {
   background: 'var(--sg-bg-elevated)',
   border: '1px solid var(--sg-border)',
 };
+
+function HoldingTermsEditor({
+  holding,
+  userId,
+  actorId,
+  actorEmail,
+  onSaved,
+}: {
+  holding: PortfolioHolding;
+  userId: string;
+  actorId?: string;
+  actorEmail?: string;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [strike, setStrike] = useState(holding.strikePrice != null ? String(holding.strikePrice) : '');
+  const [entry, setEntry] = useState(holding.entryUnderlyingPrice != null ? String(holding.entryUnderlyingPrice) : '');
+  const [saving, setSaving] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" className="sg-action-btn text-xs px-2 py-1" onClick={() => setOpen(true)}>
+        Adjust
+      </button>
+    );
+  }
+
+  const save = async () => {
+    const strikeNum = Number(strike);
+    const entryNum = Number(entry);
+    if (!(strikeNum > 0) || !(entryNum > 0)) {
+      toast.error('Enter both the strike and the entry price.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await correctPositionTerms({
+        userId,
+        symbol: holding.symbol,
+        strikePrice: strikeNum,
+        entryUnderlyingPrice: entryNum,
+      });
+      if (actorId) {
+        logAction(actorId, actorEmail ?? '', 'Position terms corrected', `${holding.symbol} strike ${strikeNum} entry ${entryNum}`);
+      }
+      toast.success('Strike and entry price updated');
+      setOpen(false);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update strike');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <input
+        type="number"
+        min="0"
+        step="any"
+        value={strike}
+        onChange={(e) => setStrike(e.target.value)}
+        placeholder="Strike"
+        className="sg-input py-1 px-2 text-xs w-24"
+      />
+      <input
+        type="number"
+        min="0"
+        step="any"
+        value={entry}
+        onChange={(e) => setEntry(e.target.value)}
+        placeholder="Entry"
+        className="sg-input py-1 px-2 text-xs w-24"
+      />
+      <div className="flex gap-1">
+        <button type="button" className="sg-action-btn text-xs px-2 py-1" disabled={saving} onClick={save}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" className="sg-btn-ghost text-xs px-2 py-1" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
@@ -76,7 +164,7 @@ export interface ClientDetailsDrawerProps {
 }
 
 export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsDrawerProps) {
-  const { profile: viewer } = useInvestorAuth();
+  const { user, profile: viewer } = useInvestorAuth();
   const canViewBook = viewer ? isPlatformAdmin(viewer.role) : false;
   const [balance, setBalance] = useState<number | null>(null);
   const [requests, setRequests] = useState<FundingRequest[]>([]);
@@ -446,8 +534,11 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                         <th className="text-right py-1.5 pr-3">Qty</th>
                         <th className="text-right py-1.5 pr-3">Avg cost</th>
                         <th className="text-right py-1.5 pr-3">Mark</th>
+                        <th className="text-right py-1.5 pr-3">Strike</th>
+                        <th className="text-right py-1.5 pr-3">Entry</th>
                         <th className="text-right py-1.5 pr-3">P/L</th>
-                        <th className="text-right py-1.5">Value</th>
+                        <th className="text-right py-1.5 pr-3">Value</th>
+                        <th className="text-right py-1.5" />
                       </tr>
                     </thead>
                     <tbody>
@@ -460,6 +551,8 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                           <td className="py-1.5 pr-3 text-right">{h.shares}</td>
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(h.averagePrice)}</td>
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(h.price)}</td>
+                          <td className="py-1.5 pr-3 text-right">{h.strikePrice != null ? fmtMoney(h.strikePrice) : '—'}</td>
+                          <td className="py-1.5 pr-3 text-right">{h.entryUnderlyingPrice != null ? fmtMoney(h.entryUnderlyingPrice) : '—'}</td>
                           <td
                             className="py-1.5 pr-3 text-right"
                             style={{
@@ -472,6 +565,15 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                             {fmtMoney(typeof h.optionPnl === 'number' ? h.optionPnl : h.value - h.shares * h.averagePrice)}
                           </td>
                           <td className="py-1.5 text-right sg-text-main">{fmtMoney(h.value)}</td>
+                          <td className="py-1.5 text-right">
+                            <HoldingTermsEditor
+                              holding={h}
+                              userId={profile.id}
+                              actorId={user?.uid}
+                              actorEmail={viewer?.email}
+                              onSaved={() => setReloadKey((n) => n + 1)}
+                            />
+                          </td>
                         </tr>
                       ))}
                     </tbody>

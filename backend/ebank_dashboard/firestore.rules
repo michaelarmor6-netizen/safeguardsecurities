@@ -445,14 +445,22 @@ service cloud.firestore {
       allow write: if isInvestorAdmin();
     }
 
-    // Trade execution ledger - every fill, written only by the fillOrder
-    // Cloud Function via the Admin SDK (bypasses these rules). Owner and
-    // admins can read; no client writes, and corrections go through the
-    // updateTradeContract function, not direct writes.
+    // Trade execution ledger. Fills are written by fillOrder via the Admin
+    // SDK. Admins may correct only the strike and the entry price; quantity,
+    // premium, and trade value stay as filled.
     match /trades/{tradeId} {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
-      allow write: if false;
+      allow update: if isInvestorAdmin()
+        && request.resource.data.quantity == resource.data.quantity
+        && request.resource.data.price == resource.data.price
+        && request.resource.data.grossAmount == resource.data.grossAmount
+        && request.resource.data.fees == resource.data.fees
+        && request.resource.data.commission == resource.data.commission
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.symbol == resource.data.symbol
+        && request.resource.data.side == resource.data.side;
+      allow create, delete: if false;
     }
 
     // Cash movement audit trail - written only by fillOrder via the Admin

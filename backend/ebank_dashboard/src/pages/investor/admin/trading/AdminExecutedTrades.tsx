@@ -2,19 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Download, Edit2, Search } from 'lucide-react';
 import { getAllTrades, type Trade } from '../../../../services/investor/tradesService';
-import { updateTradeContract } from '../../../../services/investor/tradingService';
+import { correctPositionTerms } from '../../../../services/investor/tradingService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../../services/investor/auditService';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n);
-
-const TRADE_CORRECTION_WINDOW_DAYS = 3;
-
-function withinCorrectionWindow(executedAt?: Date): boolean {
-  if (!executedAt) return false;
-  return Date.now() - executedAt.getTime() <= TRADE_CORRECTION_WINDOW_DAYS * 24 * 60 * 60 * 1000;
-}
 
 function creditDebit(t: Trade): number {
   return t.side === 'buy' ? -(t.grossAmount + t.fees + t.commission) : t.grossAmount - t.fees - t.commission;
@@ -58,11 +51,9 @@ function downloadCsv(rows: Trade[]) {
 function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) {
   const { user, profile } = useInvestorAuth();
   const [editing, setEditing] = useState(false);
-  const [contractSize, setContractSize] = useState(trade.contractSize != null ? String(trade.contractSize) : '');
-  const [clientStatus, setClientStatus] = useState(trade.clientStatus ?? 'active');
+  const [strike, setStrike] = useState(trade.strikePrice != null ? String(trade.strikePrice) : '');
+  const [entry, setEntry] = useState('');
   const [saving, setSaving] = useState(false);
-
-  if (!withinCorrectionWindow(trade.executedAt)) return null;
 
   if (!editing) {
     return (
@@ -73,19 +64,26 @@ function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) 
   }
 
   const save = async () => {
+    const strikeNum = Number(strike);
+    const entryNum = Number(entry);
+    if (!(strikeNum > 0) || !(entryNum > 0)) {
+      toast.error('Enter both the strike and the entry price.');
+      return;
+    }
     setSaving(true);
     try {
-      await updateTradeContract({
-        tradeId: trade.id,
-        contractSize: contractSize ? Number(contractSize) : null,
-        clientStatus: clientStatus as 'pending' | 'active' | 'inactive',
+      await correctPositionTerms({
+        userId: trade.userId,
+        symbol: trade.symbol,
+        strikePrice: strikeNum,
+        entryUnderlyingPrice: entryNum,
       });
-      if (user) logAction(user.uid, profile?.email ?? '', 'Trade corrected', `${trade.tradeRef}`);
-      toast.success('Trade metadata updated');
+      if (user) logAction(user.uid, profile?.email ?? '', 'Position terms corrected', `${trade.symbol} strike ${strikeNum} entry ${entryNum}`);
+      toast.success('Strike and entry price updated');
       setEditing(false);
       onDone();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to update trade');
+      toast.error(err instanceof Error ? err.message : 'Failed to update strike');
     } finally {
       setSaving(false);
     }
@@ -95,20 +93,22 @@ function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) 
     <div className="flex flex-wrap items-center gap-1.5">
       <input
         type="number"
-        value={contractSize}
-        onChange={(e) => setContractSize(e.target.value)}
-        placeholder="Contract size"
+        min="0"
+        step="any"
+        value={strike}
+        onChange={(e) => setStrike(e.target.value)}
+        placeholder="Strike"
         className="sg-input py-1 px-2 text-xs w-24"
       />
-      <select
-        value={clientStatus}
-        onChange={(e) => setClientStatus(e.target.value as 'pending' | 'active' | 'inactive')}
-        className="sg-input py-1 px-2 text-xs"
-      >
-        <option value="pending">Pending</option>
-        <option value="active">Active</option>
-        <option value="inactive">Inactive</option>
-      </select>
+      <input
+        type="number"
+        min="0"
+        step="any"
+        value={entry}
+        onChange={(e) => setEntry(e.target.value)}
+        placeholder="Entry"
+        className="sg-input py-1 px-2 text-xs w-24"
+      />
       <button type="button" className="sg-action-btn text-xs px-2 py-1" disabled={saving} onClick={save}>
         {saving ? 'Saving...' : 'Save'}
       </button>
@@ -162,7 +162,7 @@ export default function AdminExecutedTrades() {
 
       <div className="sg-panel overflow-x-auto">
         <div className="px-4 pt-4 pb-2 text-xs" style={{ color: 'var(--sg-muted-2)' }}>
-          Edit available for {TRADE_CORRECTION_WINDOW_DAYS} days after execution (metadata only — quantity, price, and gross value are permanent).
+          Strike and entry price can be corrected on an open position. The strike has to stay below the entry price. Quantity, premium, and trade value stay as filled.
         </div>
         <table className="min-w-full text-sm">
           <thead className="sg-text-muted">
