@@ -7,7 +7,7 @@ import { fetchDailyCloses, generateSignalFromIndicators } from './ai';
 import { computeIndicators } from './indicators';
 import { fetchMarketNews, fetchCompanyProfile, fetchCompanyMetrics, fetchQuote } from './finnhub';
 import { reserveSignal, releaseSignal } from './entitlements';
-import { fetchUnderlyingClose } from './underlyingPrices';
+import { fetchUnderlyingClose, rollUnderlyingPrice } from './underlyingPrices';
 
 initializeApp();
 
@@ -273,10 +273,12 @@ async function refreshUnderlyingPrices(apiKey: string): Promise<UnderlyingRefres
     if (i > 0) await sleep(RATE_LIMIT_GAP_MS);
     try {
       const bar = await fetchUnderlyingClose(apiKey, ticker);
-      await db
-        .collection('marketPrices')
-        .doc(ticker.replace(/[^A-Z0-9]/g, '_'))
-        .set({ ...bar, fetchedAt: FieldValue.serverTimestamp() }, { merge: true });
+      const ref = db.collection('marketPrices').doc(ticker.replace(/[^A-Z0-9]/g, '_'));
+      const existing = await ref.get();
+      await ref.set(
+        { ...rollUnderlyingPrice(existing.data(), bar), fetchedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
       updated++;
       details.push({ ticker, ok: true, price: bar.price, asOf: bar.asOf });
     } catch (err) {
@@ -347,23 +349,25 @@ export const setUnderlyingPriceManually = onCall(async (request) => {
     throw new HttpsError('invalid-argument', 'asOf must be YYYY-MM-DD');
   }
 
-  const profile = await getFirestore().doc(`profiles/${uid}`).get();
+  const db = getFirestore();
+  const profile = await db.doc(`profiles/${uid}`).get();
+  const ref = db.collection('marketPrices').doc(ticker.replace(/[^A-Z0-9]/g, '_'));
+  const existing = await ref.get();
 
-  await getFirestore()
-    .collection('marketPrices')
-    .doc(ticker.replace(/[^A-Z0-9]/g, '_'))
-    .set(
-      {
+  await ref.set(
+    {
+      ...rollUnderlyingPrice(existing.data(), {
         ticker,
         price,
-        priceType: 'settlement',
+        priceType: 'settlement' as const,
         asOf,
         source: 'manual',
-        postedBy: profile.data()?.email ?? uid,
-        fetchedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+      }),
+      postedBy: profile.data()?.email ?? uid,
+      fetchedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
 
   return { ticker, price, asOf };
 });

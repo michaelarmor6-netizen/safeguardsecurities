@@ -431,6 +431,7 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                         <th className="text-right py-1.5 pr-3">Qty</th>
                         <th className="text-right py-1.5 pr-3">Avg cost</th>
                         <th className="text-right py-1.5 pr-3">Mark</th>
+                        <th className="text-right py-1.5 pr-3">P/L</th>
                         <th className="text-right py-1.5">Value</th>
                       </tr>
                     </thead>
@@ -444,6 +445,17 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                           <td className="py-1.5 pr-3 text-right">{h.shares}</td>
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(h.averagePrice)}</td>
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(h.price)}</td>
+                          <td
+                            className="py-1.5 pr-3 text-right"
+                            style={{
+                              color:
+                                (typeof h.optionPnl === 'number' ? h.optionPnl : h.value - h.shares * h.averagePrice) >= 0
+                                  ? 'var(--sg-teal)'
+                                  : 'var(--sg-danger)',
+                            }}
+                          >
+                            {fmtMoney(typeof h.optionPnl === 'number' ? h.optionPnl : h.value - h.shares * h.averagePrice)}
+                          </td>
                           <td className="py-1.5 text-right sg-text-main">{fmtMoney(h.value)}</td>
                         </tr>
                       ))}

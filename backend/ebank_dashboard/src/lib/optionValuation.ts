@@ -2,31 +2,37 @@
 //
 // SafeGuard is the counterparty and this payoff IS the contract, so the maths
 // below is the product definition rather than an approximation of exchange
-// option pricing. It is deliberately linear: every $1 the underlying moves in
-// the client's favour pays `multiplier` dollars per contract, regardless of
-// strike, time to expiry, or implied volatility.
+// option pricing. It is deliberately linear, measured from the broker's strike
+// to the running underlying price:
 //
-//   P/L    = (mark - entry) x multiplier x contracts,  floored at -premiumPaid
-//   Value  = premiumPaid + P/L,                        floored at 0
+//   Call  favorable move = current - strike     (price up)
+//   Put   favorable move = strike - current     (price down)
+//   P/L   = favorable move x $100 x contracts,  floored at -premiumPaid
+//   Value = premiumPaid + P/L,                  floored at 0
 //
-// The floor is what makes the product limited-risk: the client can never lose
-// more than the premium they paid. It is not a display nicety - without it the
-// platform would show clients losses they do not owe. Gold: multiplier 100
-// (troy oz per contract), so a $100 move pays $10,000 per contract.
+// One dollar in the client's favor pays $100 per contract they hold. A dollar
+// against them loses $100 per contract, and the loss stops at the premium
+// paid. The floor is the limited-risk term: without it the platform would
+// show clients losses they do not owe.
 //
 // Pure functions, no I/O, so the same file can be used by the client workspace
 // and by Cloud Functions (statements, snapshots) - one definition of the
 // payoff rather than three that drift apart.
+
+/** Dollars of P/L per $1 favorable move, per contract. */
+export const OPTION_DOLLARS_PER_POINT = 100;
+
+export type OptionSide = 'call' | 'put';
 
 export interface OptionPosition {
   /** Number of contracts held. */
   contracts: number;
   /** Premium paid per contract, in account currency (e.g. 1008). */
   premiumPerContract: number;
-  /** Underlying price at entry, per unit (e.g. 4300 per troy oz). */
-  entryUnderlyingPrice: number;
-  /** Units of underlying controlled per contract (e.g. 100 troy oz). */
-  multiplier: number;
+  /** Broker strike. P/L is measured from this price to the current underlying. */
+  strikePrice: number;
+  /** Call profits when the underlying rises; put profits when it falls. */
+  optionType: OptionSide;
 }
 
 export interface OptionValuation {
@@ -42,7 +48,7 @@ export interface OptionValuation {
   maxLoss: number;
   /** True when the floor bound the loss - i.e. the position is a total write-off. */
   isCapped: boolean;
-  /** Move in the underlying since entry, per unit. */
+  /** Points in the client's favor since the strike. Negative when the move is against them. */
   underlyingMove: number;
 }
 
@@ -50,37 +56,56 @@ function isUsable(n: unknown): n is number {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
+export function isOptionSide(value: unknown): value is OptionSide {
+  return value === 'call' || value === 'put';
+}
+
 /**
- * Value a position against a current underlying price.
+ * On the day a contract is opened, the broker's strike is always below the
+ * current underlying price. Equal is not enough — the contract is entered
+ * with the market already above the strike.
+ */
+export function strikeBelowEntryPrice(strikePrice: number, currentPrice: number): boolean {
+  return isUsable(strikePrice) && isUsable(currentPrice) && strikePrice > 0 && currentPrice > 0 && strikePrice < currentPrice;
+}
+
+/**
+ * Points in the client's favor from the strike to the current price.
+ * Call: current above strike. Put: current below strike.
+ */
+export function favorableMove(optionType: OptionSide, strikePrice: number, currentPrice: number): number {
+  return optionType === 'call' ? currentPrice - strikePrice : strikePrice - currentPrice;
+}
+
+/**
+ * Value a position against the running underlying price.
  *
- * Returns null when the inputs cannot support a valuation - most often a
- * position opened before entryUnderlyingPrice was recorded, or an instrument
- * with no live underlying price. Callers should fall back to marking at cost
+ * Returns null when the inputs cannot support a valuation - no strike, no
+ * call/put, or no current price. Callers should fall back to marking at cost
  * rather than inventing a number.
  */
 export function valueOptionPosition(
   pos: OptionPosition,
-  markUnderlyingPrice: number,
+  currentPrice: number,
 ): OptionValuation | null {
-  const { contracts, premiumPerContract, entryUnderlyingPrice, multiplier } = pos;
+  const { contracts, premiumPerContract, strikePrice, optionType } = pos;
 
   if (
     !isUsable(contracts) ||
     !isUsable(premiumPerContract) ||
-    !isUsable(entryUnderlyingPrice) ||
-    !isUsable(multiplier) ||
-    !isUsable(markUnderlyingPrice) ||
+    !isUsable(strikePrice) ||
+    !isUsable(currentPrice) ||
+    !isOptionSide(optionType) ||
     contracts <= 0 ||
-    entryUnderlyingPrice <= 0 ||
-    multiplier <= 0 ||
-    markUnderlyingPrice <= 0
+    strikePrice <= 0 ||
+    currentPrice <= 0
   ) {
     return null;
   }
 
   const premiumPaid = premiumPerContract * contracts;
-  const underlyingMove = markUnderlyingPrice - entryUnderlyingPrice;
-  const grossPnl = underlyingMove * multiplier * contracts;
+  const underlyingMove = favorableMove(optionType, strikePrice, currentPrice);
+  const grossPnl = underlyingMove * OPTION_DOLLARS_PER_POINT * contracts;
 
   // Limited risk: losses stop at the premium paid.
   const pnl = Math.max(grossPnl, -premiumPaid);
@@ -95,6 +120,48 @@ export function valueOptionPosition(
     isCapped,
     underlyingMove,
   };
+}
+
+/** Unrealized return on premium, in percent. Zero when nothing was paid. */
+export function optionReturnPercent(valuation: OptionValuation): number {
+  if (!isUsable(valuation.premiumPaid) || valuation.premiumPaid <= 0) return 0;
+  return (valuation.pnl / valuation.premiumPaid) * 100;
+}
+
+/**
+ * Change in position value between two underlying prices.
+ * Both prices pass through the limited-risk floor, so a position already
+ * written off does not keep losing on a further adverse move.
+ */
+export function optionSessionPnl(
+  pos: OptionPosition,
+  currentPrice: number,
+  previousPrice: number,
+): number | null {
+  const today = valueOptionPosition(pos, currentPrice);
+  const prior = valueOptionPosition(pos, previousPrice);
+  if (!today || !prior) return null;
+  return today.value - prior.value;
+}
+
+/**
+ * One holding's unrealized P/L.
+ * Option books use the payoff (already floored at the premium). Everything
+ * else is value minus cost. Callers must sum this per holding: folding a
+ * whole portfolio into the option figure alone drops every other position's
+ * move, so the headline P/L stays still while those prices change.
+ */
+export function unrealizedGain(input: {
+  optionPnl?: number;
+  value: number;
+  quantity: number;
+  averagePrice: number;
+}): number {
+  if (typeof input.optionPnl === 'number' && Number.isFinite(input.optionPnl)) return input.optionPnl;
+  const value = Number(input.value);
+  const cost = Number(input.quantity) * Number(input.averagePrice);
+  if (!Number.isFinite(value) || !Number.isFinite(cost)) return 0;
+  return value - cost;
 }
 
 /**
@@ -114,16 +181,17 @@ export function applyBrokerageFee(
   return { fee, netPnl: pnl - fee };
 }
 
-/** Break-even underlying price: where the payoff exactly repays the premium. */
+/** Underlying price at which the payoff exactly repays the premium. */
 export function breakEvenPrice(pos: OptionPosition): number | null {
-  const { premiumPerContract, entryUnderlyingPrice, multiplier } = pos;
+  const { premiumPerContract, strikePrice, optionType } = pos;
   if (
     !isUsable(premiumPerContract) ||
-    !isUsable(entryUnderlyingPrice) ||
-    !isUsable(multiplier) ||
-    multiplier <= 0
+    !isUsable(strikePrice) ||
+    !isOptionSide(optionType) ||
+    strikePrice <= 0
   ) {
     return null;
   }
-  return entryUnderlyingPrice + premiumPerContract / multiplier;
+  const points = premiumPerContract / OPTION_DOLLARS_PER_POINT;
+  return optionType === 'call' ? strikePrice + points : strikePrice - points;
 }

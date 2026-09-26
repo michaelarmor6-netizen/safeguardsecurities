@@ -4,7 +4,7 @@ import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 import { getAllFundingRequests, getPendingFundingRequests } from './fundingService';
 import { getQuote } from './marketService';
 import { getAllAssets, type AssetClass } from './assetCatalogService';
-import { valueOptionPosition, breakEvenPrice } from '../../lib/optionValuation';
+import { valueOptionPosition, breakEvenPrice, optionReturnPercent, optionSessionPnl, unrealizedGain, isOptionSide } from '../../lib/optionValuation';
 import { getAllOrders, getPendingOrders } from './orderService';
 import { getAllInvestorProfiles, getPendingApplicants } from './profileService';
 import { getAllWallets } from './walletService';
@@ -25,10 +25,14 @@ export interface PortfolioHolding {
   sector?: string;
   assetId?: string;
   assetClass?: AssetClass;
-  /** Underlying price at entry — P/L reference for limited-risk options. */
+  /** Underlying price at entry — recorded at fill; P/L uses the strike, not this. */
   entryUnderlyingPrice?: number;
-  /** Units of underlying per contract (100 troy oz for gold). */
+  /** Units of underlying per contract, recorded at fill. Payoff is $100 per point. */
   multiplier?: number;
+  /** Broker strike. P/L is measured from this price to the current underlying. */
+  strikePrice?: number;
+  /** Call profits when price rises; put profits when it falls. */
+  optionType?: 'call' | 'put';
   /** Payoff after the limited-risk floor, when the position can be valued. */
   optionPnl?: number;
   /** Maximum possible loss — the premium paid. */
@@ -41,6 +45,12 @@ export interface PortfolioHolding {
   markedAtCost?: boolean;
   /** Trading session (YYYY-MM-DD) of the settlement used to mark the payoff. */
   markAsOf?: string;
+  /**
+   * Change in this holding's value since the previous settlement.
+   * Absent when there is no prior mark to compare — distinct from a measured
+   * flat day, which is 0.
+   */
+  dayPnl?: number;
 }
 
 export interface PortfolioStats {
@@ -67,8 +77,47 @@ function mapRawHolding(id: string, data: DocumentData): Omit<PortfolioHolding, '
     sector: data.sector,
     assetId: data.assetId ?? undefined,
     entryUnderlyingPrice: Number(data.entryUnderlyingPrice ?? 0) || undefined,
-    multiplier: Number(data.multiplier ?? 0) || undefined,
+    multiplier: Number(data.multiplier ?? data.contractSize ?? 0) || undefined,
+    strikePrice: Number(data.strikePrice ?? 0) || undefined,
+    optionType: isOptionSide(data.optionType) ? data.optionType : undefined,
   };
+}
+
+interface OpeningTerms {
+  strike?: number;
+  optionType?: 'call' | 'put';
+}
+
+// Existing holdings often have the strike and call/put only on the filled
+// order. Without both, P/L cannot be measured from the strike and the book
+// stays at the premium while the underlying moves.
+async function loadOpeningTerms(userId: string): Promise<Map<string, OpeningTerms>> {
+  const snap = await getDocs(query(collection(db, LIVE_COLLECTIONS.orders), where('userId', '==', userId)));
+  const best = new Map<string, { strike?: number; strikeAt: number; optionType?: 'call' | 'put'; typeAt: number }>();
+  for (const d of snap.docs) {
+    const data = d.data();
+    const status = String(data.status ?? '');
+    if (status !== 'filled' && status !== 'partially_filled') continue;
+    const symbol = String(data.symbol ?? '').trim().toUpperCase();
+    if (!symbol) continue;
+    const strike = Number(data.strikePrice ?? 0);
+    const optionType = isOptionSide(data.optionType) ? data.optionType : undefined;
+    if (!(strike > 0) && !optionType) continue;
+    const at = typeof data.createdAt?.toMillis === 'function' ? data.createdAt.toMillis() : Number.MAX_SAFE_INTEGER;
+    const prev = best.get(symbol) ?? { strikeAt: Number.POSITIVE_INFINITY, typeAt: Number.POSITIVE_INFINITY };
+    if (strike > 0 && at < prev.strikeAt) {
+      prev.strike = strike;
+      prev.strikeAt = at;
+    }
+    if (optionType && at < prev.typeAt) {
+      prev.optionType = optionType;
+      prev.typeAt = at;
+    }
+    best.set(symbol, prev);
+  }
+  const terms = new Map<string, OpeningTerms>();
+  for (const [symbol, row] of best) terms.set(symbol, { strike: row.strike, optionType: row.optionType });
+  return terms;
 }
 
 export interface RawHolding {
@@ -99,6 +148,8 @@ export async function getAllHoldingsRaw(): Promise<RawHolding[]> {
 interface UnderlyingMark {
   price: number;
   asOf?: string;
+  previousPrice?: number;
+  previousAsOf?: string;
 }
 
 // Same doc-id sanitisation functions-market uses when it writes marketPrices.
@@ -117,9 +168,16 @@ async function fetchUnderlyingMarks(tickers: string[]): Promise<Map<string, Unde
     unique.map(async (ticker) => {
       try {
         const snap = await getDoc(doc(db, 'marketPrices', marketPriceDocId(ticker)));
-        const price = Number(snap.data()?.price);
+        const data = snap.data();
+        const price = Number(data?.price);
+        const previousPrice = Number(data?.previousPrice);
         if (snap.exists() && Number.isFinite(price) && price > 0) {
-          marks.set(ticker, { price, asOf: typeof snap.data()?.asOf === 'string' ? snap.data()?.asOf : undefined });
+          marks.set(ticker, {
+            price,
+            asOf: typeof data?.asOf === 'string' ? data.asOf : undefined,
+            previousPrice: Number.isFinite(previousPrice) && previousPrice > 0 ? previousPrice : undefined,
+            previousAsOf: typeof data?.previousAsOf === 'string' ? data.previousAsOf : undefined,
+          });
         }
       } catch {
         // Unreadable mark = unmarked position, never a crash.
@@ -151,11 +209,15 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
     .filter((x): x is string => typeof x === 'string' && x.length > 0);
   const marks = await fetchUnderlyingMarks(underlyingTickers);
 
+  const needsOpeningTerms = rows.some((r) => !r.strikePrice || !r.optionType);
+  const openingTerms = needsOpeningTerms ? await loadOpeningTerms(userId).catch(() => new Map<string, OpeningTerms>()) : new Map<string, OpeningTerms>();
+
   const enriched: PortfolioHolding[] = [];
 
   for (const row of rows) {
     const asset = (row.assetId ? byId.get(row.assetId) : undefined) ?? bySymbol.get(row.symbol);
     const quote = await getQuote(row.symbol, row.currentPrice);
+    const opening = openingTerms.get(row.symbol.trim().toUpperCase());
 
     // The catalog's cached quote may ONLY be used when the holding is that
     // exact instrument. Root commodities carry a proxy quoteSymbol (Gold/GC
@@ -171,52 +233,50 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
     // at $0 tells the client their holding is worthless, which is not true.
     const livePrice = quote.price || row.currentPrice || catalogPrice || 0;
     const markedAtCost = livePrice <= 0;
-    const price = markedAtCost ? row.averagePrice : livePrice;
-    const value = row.shares * price;
+    const spotValue = row.shares * (markedAtCost ? row.averagePrice : livePrice);
 
-    // Limited-risk option payoff. Needs the entry underlying price and the
-    // multiplier, both persisted at fill; returns null when either is absent
-    // (positions opened before those fields existed) or when there is no live
-    // underlying price. In that case we keep the mark-at-cost path rather than
-    // inventing a valuation.
-    // The mark for the payoff is the underlying's daily settlement, NOT any
-    // quote on the contract symbol itself (which rarely exists). Falls back
-    // to livePrice for instruments that do quote directly.
+    // Limited-risk option payoff. The basis is the broker's strike, compared
+    // with the running underlying price. Call: each $1 up pays $100 per
+    // contract. Put: each $1 down pays $100 per contract. Losses stop at the
+    // premium. The current price is the underlying settlement — never the
+    // premium and never a proxy quote.
     const underlyingTicker = asset?.underlyingPriceSymbol?.trim().toUpperCase();
     const mark = underlyingTicker ? marks.get(underlyingTicker) : undefined;
-    const valuation = valueOptionPosition(
-      {
-        contracts: row.shares,
-        premiumPerContract: row.averagePrice,
-        entryUnderlyingPrice: row.entryUnderlyingPrice ?? 0,
-        multiplier: row.multiplier ?? 0,
-      },
-      mark?.price ?? livePrice,
-    );
+    const strikePrice = row.strikePrice ?? opening?.strike ?? 0;
+    const optionType = row.optionType ?? opening?.optionType;
+    const position = optionType
+      ? {
+          contracts: row.shares,
+          premiumPerContract: row.averagePrice,
+          strikePrice,
+          optionType,
+        }
+      : null;
+    const valuation = position && mark?.price ? valueOptionPosition(position, mark.price) : null;
+    const sessionPnl =
+      position && valuation && mark?.previousPrice ? optionSessionPnl(position, mark.price, mark.previousPrice) : null;
 
     enriched.push({
       ...row,
       name: asset?.name ?? row.name,
       assetClass: asset?.assetClass,
-      price,
-      change: markedAtCost ? 0 : quote.change,
-      changePercent: markedAtCost ? 0 : quote.changePercent,
-      value: valuation ? valuation.value : value,
+      strikePrice: strikePrice || undefined,
+      optionType,
+      // For a valued option the mark is current value per contract, so the
+      // figure on screen moves with the underlying instead of sitting on the
+      // premium that was paid.
+      price: valuation ? valuation.value / row.shares : markedAtCost ? row.averagePrice : livePrice,
+      change: valuation ? valuation.pnl / row.shares : markedAtCost ? 0 : quote.change,
+      changePercent: valuation ? optionReturnPercent(valuation) : markedAtCost ? 0 : quote.changePercent,
+      value: valuation ? valuation.value : spotValue,
       allocation: 0,
       markedAtCost: valuation ? false : markedAtCost,
       markAsOf: valuation ? mark?.asOf : undefined,
+      dayPnl: sessionPnl ?? (valuation ? undefined : markedAtCost ? 0 : quote.change * row.shares),
       optionPnl: valuation?.pnl,
       maxLoss: valuation?.maxLoss,
       isCapped: valuation?.isCapped,
-      breakEven:
-        row.entryUnderlyingPrice && row.multiplier
-          ? breakEvenPrice({
-              contracts: row.shares,
-              premiumPerContract: row.averagePrice,
-              entryUnderlyingPrice: row.entryUnderlyingPrice,
-              multiplier: row.multiplier,
-            }) ?? undefined
-          : undefined,
+      breakEven: position ? breakEvenPrice(position) ?? undefined : undefined,
     });
   }
 
@@ -237,19 +297,20 @@ export async function getPortfolioStatsForUser(userId: string): Promise<Portfoli
   // whole position value was reported as profit.
   const costBasis = holdings.reduce((sum, h) => sum + h.shares * h.averagePrice, 0);
 
-  // Where a position was valued through the option payoff, its P/L is already
-  // computed (and floored at the premium). Summing those is more accurate than
-  // value - cost, which would ignore the limited-risk cap.
-  const payoffPnl = holdings.reduce(
-    (sum, h) => (typeof h.optionPnl === 'number' ? sum + h.optionPnl : sum),
+  // Sum each holding on its own. Using only the option payoff whenever ANY
+  // position had one dropped every other holding's mark-to-market, so the
+  // headline P/L stayed put while those prices moved.
+  const totalGain = holdings.reduce(
+    (sum, h) => sum + unrealizedGain({ optionPnl: h.optionPnl, value: h.value, quantity: h.shares, averagePrice: h.averagePrice }),
     0,
   );
-  const hasPayoffPositions = holdings.some((h) => typeof h.optionPnl === 'number');
 
   const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
-  const totalGain = hasPayoffPositions ? payoffPnl : totalValue - costBasis;
   const totalGainPercent = costBasis > 0 ? (totalGain / costBasis) * 100 : 0;
-  const dayChange = holdings.reduce((sum, h) => sum + h.change * h.shares, 0);
+  // Day move is the session change in value (prior settlement → current), not
+  // the equity-quote change. Derivative contracts have no such quote, so the
+  // old `change * shares` path reported $0 on every day the book actually moved.
+  const dayChange = holdings.reduce((sum, h) => sum + (h.dayPnl ?? 0), 0);
   const dayChangePercent = totalValue > 0 ? (dayChange / totalValue) * 100 : 0;
 
   return {

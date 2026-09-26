@@ -26,6 +26,25 @@ export interface UnderlyingPrice {
 
 const MASSIVE_BASE = 'https://api.massive.com';
 
+/** Keep the prior session's price when a new settlement arrives, so day P/L has a baseline. */
+export function rollUnderlyingPrice<T extends { price: number; asOf: string }>(
+  existing: { price?: unknown; asOf?: unknown; previousPrice?: unknown; previousAsOf?: unknown } | undefined,
+  next: T,
+): T & { previousPrice?: number; previousAsOf?: string } {
+  const prevPrice = Number(existing?.price);
+  const prevAsOf = typeof existing?.asOf === 'string' ? existing.asOf : undefined;
+  const sameSession = prevAsOf != null && prevAsOf === next.asOf;
+  if (!sameSession && Number.isFinite(prevPrice) && prevPrice > 0 && prevAsOf) {
+    return { ...next, previousPrice: prevPrice, previousAsOf: prevAsOf };
+  }
+  const keptPrev = Number(existing?.previousPrice);
+  const keptAsOf = typeof existing?.previousAsOf === 'string' ? existing.previousAsOf : undefined;
+  if (Number.isFinite(keptPrev) && keptPrev > 0 && keptAsOf) {
+    return { ...next, previousPrice: keptPrev, previousAsOf: keptAsOf };
+  }
+  return next;
+}
+
 /**
  * Most recent completed SESSION bar for a futures contract.
  *

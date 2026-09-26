@@ -14,7 +14,7 @@ import {
   normalizeCreditAmount,
   fundingReferenceFor,
 } from './lib';
-import { valueOptionPosition } from './optionValuation';
+import { isOptionSide, strikeBelowEntryPrice, valueOptionPosition } from './optionValuation';
 
 initializeApp();
 
@@ -87,6 +87,19 @@ export const placeOrderOnBehalf = onCall(async (request) => {
   const isOption = Boolean(data.optionType);
   if (isOption && (!data.strikePrice || !data.expiryDate)) {
     throw new HttpsError('invalid-argument', 'Option contracts require optionType, strikePrice, and expiryDate');
+  }
+  if (isOption) {
+    const strike = Number(data.strikePrice);
+    const current = Number(data.entryUnderlyingPrice);
+    if (!(current > 0)) {
+      throw new HttpsError('invalid-argument', 'Enter the current underlying price for the day the contract is opened');
+    }
+    if (!strikeBelowEntryPrice(strike, current)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Strike price must be lower than the current underlying price on the day the contract is entered',
+      );
+    }
   }
 
   const db = getFirestore();
@@ -183,6 +196,16 @@ export const fillOrder = onCall(async (request) => {
     const orderSnap = await tx.get(orderRef);
     if (!orderSnap.exists) throw new HttpsError('not-found', 'Order not found');
     const order = orderSnap.data()!;
+
+    const openingStrike = Number(data.strikePrice ?? order.strikePrice ?? 0);
+    const openingCurrent = Number(data.entryUnderlyingPrice ?? order.entryUnderlyingPrice ?? 0);
+    const openingType = data.optionType ?? order.optionType;
+    if (openingType && openingCurrent > 0 && !strikeBelowEntryPrice(openingStrike, openingCurrent)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Strike price must be lower than the current underlying price on the day the contract is entered',
+      );
+    }
 
     if (FINAL_STATUSES.has(order.status)) {
       throw new HttpsError('failed-precondition', `Order is already ${order.status} and cannot accept new fills`);
@@ -316,13 +339,13 @@ export const fillOrder = onCall(async (request) => {
         quantity: newQty,
         avgCost: newAvgCost,
 
-        // Limited-risk options need TWO prices: avgCost is the premium paid,
-        // entryUnderlyingPrice is what P/L is measured against. Without both
-        // (and the multiplier) a position cannot be valued at all.
+        // The strike is the P/L basis. Copy it onto the holding so an existing
+        // book can be revalued without re-reading the order.
         entryUnderlyingPrice:
           data.entryUnderlyingPrice ?? order.entryUnderlyingPrice ?? null,
         multiplier: contractSize ?? null,
         optionType: data.optionType ?? order.optionType ?? null,
+        strikePrice: data.strikePrice ?? order.strikePrice ?? null,
         expiryDate: data.expiryDate ?? order.expiryDate ?? null,
 
         realizedPnl: oldRealizedPnl + realizedPnlDelta,
@@ -457,6 +480,18 @@ export const updateTradeContract = onCall(async (request) => {
     throw new HttpsError('failed-precondition', 'This trade is outside its correction window');
   }
 
+  if (data.strikePrice != null) {
+    const strike = Number(data.strikePrice);
+    const orderSnap = await db.collection(ORDERS).doc(String(trade.orderId ?? '')).get();
+    const current = Number(orderSnap.data()?.entryUnderlyingPrice ?? 0);
+    if (current > 0 && !strikeBelowEntryPrice(strike, current)) {
+      throw new HttpsError(
+        'invalid-argument',
+        'Strike price must be lower than the current underlying price on the day the contract is entered',
+      );
+    }
+  }
+
   const patch: Record<string, unknown> = { remarks: 'ADJUSTED', updatedAt: FieldValue.serverTimestamp(), correctedBy: adminUid };
   if (data.optionType !== undefined) patch.optionType = data.optionType;
   if (data.strikePrice !== undefined) patch.strikePrice = data.strikePrice;
@@ -588,7 +623,11 @@ export const generateAccountStatement = onCall(async (request) => {
 
 async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
   const db = getFirestore();
-  const [walletsSnap, assetsSnap] = await Promise.all([db.collection(WALLETS).get(), db.collection(ASSETS).get()]);
+  const [walletsSnap, assetsSnap, ordersSnap] = await Promise.all([
+    db.collection(WALLETS).get(),
+    db.collection(ASSETS).get(),
+    db.collection(ORDERS).get(),
+  ]);
 
   // Valuation uses the quote already cached on each asset doc (kept fresh
   // every 5 minutes by refreshAssetQuotes in functions-market) rather than
@@ -613,6 +652,33 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
     }
   }
 
+  // Strike and call/put for positions filled before those fields were copied
+  // onto the holding. P/L is strike versus the current underlying.
+  const openingByKey = new Map<string, { strike?: number; strikeAt: number; optionType?: 'call' | 'put'; typeAt: number }>();
+  for (const o of ordersSnap.docs) {
+    const data = o.data();
+    const status = String(data.status ?? '');
+    if (status !== 'filled' && status !== 'partially_filled') continue;
+    const orderUser = String(data.userId ?? '');
+    const symbol = String(data.symbol ?? '').trim().toUpperCase();
+    if (!orderUser || !symbol) continue;
+    const strike = Number(data.strikePrice ?? 0);
+    const optionType = isOptionSide(data.optionType) ? data.optionType : undefined;
+    if (!(strike > 0) && !optionType) continue;
+    const at = typeof data.createdAt?.toMillis === 'function' ? data.createdAt.toMillis() : Number.MAX_SAFE_INTEGER;
+    const key = `${orderUser}|${symbol}`;
+    const prev = openingByKey.get(key) ?? { strikeAt: Number.POSITIVE_INFINITY, typeAt: Number.POSITIVE_INFINITY };
+    if (strike > 0 && at < prev.strikeAt) {
+      prev.strike = strike;
+      prev.strikeAt = at;
+    }
+    if (optionType && at < prev.typeAt) {
+      prev.optionType = optionType;
+      prev.typeAt = at;
+    }
+    openingByKey.set(key, prev);
+  }
+
   // Daily reference prices for underlyings, written by
   // refreshUnderlyingPricesDaily in functions-market.
   const underlyingPrice = new Map<string, number>();
@@ -632,9 +698,9 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
 
   let count = 0;
   // Derivatives that should be valued via the payoff but fall back to cost
-  // (no daily mark in marketPrices, or a position missing entryUnderlyingPrice
-  // / multiplier). Silent today; counted so a lapsed data subscription or a
-  // bad position shows up in the logs instead of as an unexplained flat chart.
+  // (no current underlying price, or a position missing strike / call-put).
+  // Counted so a lapsed data subscription or a bad position shows up in the
+  // logs instead of as an unexplained flat chart.
   let derivativesMarkedAtCost = 0;
   for (const walletDoc of walletsSnap.docs) {
     const wallet = walletDoc.data();
@@ -647,6 +713,7 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
     for (const h of holdingsSnap.docs) {
       const data = h.data();
       const qty = Number(data.quantity ?? data.shares ?? 0);
+      const symbol = String(data.symbol ?? '').trim().toUpperCase();
 
       // Limited-risk options cannot be valued as quantity x price: the client
       // paid a premium, and P/L is driven by the UNDERLYING, which is a
@@ -655,16 +722,19 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
       // a flat line.
       const underlyingTicker =
         (data.assetId && underlyingByAssetId.get(data.assetId)) ??
-        underlyingBySymbol.get(String(data.symbol));
+        underlyingBySymbol.get(symbol);
       const mark = underlyingTicker ? underlyingPrice.get(underlyingTicker) : undefined;
+      const opening = openingByKey.get(`${userId}|${symbol}`);
+      const strikePrice = Number(data.strikePrice ?? 0) || opening?.strike || 0;
+      const optionType = isOptionSide(data.optionType) ? data.optionType : opening?.optionType;
 
-      if (mark != null) {
+      if (mark != null && optionType) {
         const valuation = valueOptionPosition(
           {
             contracts: qty,
             premiumPerContract: Number(data.avgCost ?? data.averagePrice ?? 0),
-            entryUnderlyingPrice: Number(data.entryUnderlyingPrice ?? 0),
-            multiplier: Number(data.multiplier ?? 0),
+            strikePrice,
+            optionType,
           },
           mark,
         );
@@ -672,18 +742,24 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
           portfolioValue += valuation.value;
           continue;
         }
-        // valuation === null: the position predates entryUnderlyingPrice, or
-        // has no multiplier. Fall through to mark at cost rather than invent
-        // a number for a client statement.
+        // valuation === null: no strike on the position or the order.
+        // Fall through to mark at cost rather than invent a number.
       }
 
       // Reaching here with an underlying ticker means a derivative was not
       // valued via the payoff (successful valuations `continue` above).
-      if (underlyingTicker) derivativesMarkedAtCost++;
+      // Mark it at the premium paid. The asset quote is often a proxy (GLD for
+      // gold) and would put a number on the chart that is not the position.
+      if (underlyingTicker) {
+        derivativesMarkedAtCost++;
+        const cost = Number(data.avgCost ?? data.averagePrice ?? data.avgPrice ?? 0);
+        portfolioValue += qty * (Number.isFinite(cost) && cost > 0 ? cost : 0);
+        continue;
+      }
 
       const price =
         (data.assetId && priceByAssetId.get(data.assetId)) ??
-        priceBySymbol.get(String(data.symbol)) ??
+        priceBySymbol.get(symbol) ??
         Number(data.currentPrice ?? data.price ?? 0);
       portfolioValue += qty * price;
     }
@@ -717,8 +793,8 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
   if (derivativesMarkedAtCost > 0) {
     console.warn(
       `snapshotAllPortfolios: ${derivativesMarkedAtCost} derivative holding(s) marked at ` +
-        'cost (missing daily mark or entryUnderlyingPrice) - the Performance chart will ' +
-        'stay flat for those until a mark exists and the position carries an entry price.',
+        'cost (missing current price, strike, or call/put) - the Performance chart will ' +
+        'stay flat for those until a mark exists and the position carries a strike.',
     );
   }
 

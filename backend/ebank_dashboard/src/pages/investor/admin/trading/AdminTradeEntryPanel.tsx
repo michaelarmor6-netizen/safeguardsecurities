@@ -8,6 +8,7 @@ import { getSubPortfoliosForUser, type SubPortfolio } from '../../../../services
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../../services/investor/auditService';
 import { CONTRACT_MONTH_COMMODITIES, generateFuturesContractMonths } from '../../../../lib/futuresContractMonths';
+import { strikeBelowEntryPrice } from '../../../../lib/optionValuation';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n);
@@ -139,15 +140,13 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
   // What the client actually pays per unit.
   //
   // For an option that is the CONTRACT PRICE - the premium, ~$1,008 - and
-  // never the entry price. Entry price is the underlying gold reference
-  // (~$4,300) and exists only to measure P/L against. Billing ten $1,008
-  // contracts at the entry price charged $43,000 instead of $10,080.
+  // never the strike or the entry price. Billing ten $1,008 contracts at the
+  // gold price charged $43,000 instead of $10,080. P/L is strike versus the
+  // current underlying, $100 per contract per $1 in the client's favor.
   const unitCostNum = isOptionsContract ? contractPriceNum : priceNum;
 
-  // Units of underlying controlled per contract - 100 troy oz for gold - parsed
-  // from the catalog's free-text contract unit. Without it the limited-risk
-  // payoff has no multiplier and the position can only ever be marked at cost,
-  // so the desk needs to see that before placing the trade rather than after.
+  // Catalog contract size. Shown for reference. Option P/L does not use it:
+  // the payoff is a fixed $100 per contract for each $1 in the client's favor.
   const contractMultiplier = asset?.contractUnit
     ? Number(String(asset.contractUnit).replace(/[^0-9.]/g, '')) || null
     : null;
@@ -164,9 +163,13 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
 
   // An option without a premium cannot be priced, and one without a call/put
   // cannot be valued at all - so both are required, not optional.
+  const strikeNum = Number(strikePrice);
+  // On the day the contract is opened the strike sits below that day's
+  // underlying price (the Entry Price field). Equal or higher is rejected.
+  const strikeBelowCurrent = !isOptionsContract || strikeBelowEntryPrice(strikeNum, priceNum);
   const optionFieldsValid =
     !isOptionsContract ||
-    (optionType !== '' && strikePrice.trim() !== '' && expiryDate.trim() !== '' && contractPriceNum > 0);
+    (optionType !== '' && strikePrice.trim() !== '' && expiryDate.trim() !== '' && contractPriceNum > 0 && strikeBelowCurrent);
   const commodityFieldValid = !commodityGroupId || !commodityConfig || contractMonthSymbol !== '';
   const canSubmit = Boolean(
     investorId && asset && qtyNum > 0 && priceNum > 0 && unitCostNum > 0 && optionFieldsValid && commodityFieldValid,
@@ -203,16 +206,17 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
 
   const submit = async (mode: 'queue' | 'execute') => {
     if (!canSubmit || !investor || !asset) {
-      toast.error('Select an investor, instrument, quantity, and price');
+      toast.error(
+        isOptionsContract && strikeNum > 0 && priceNum > 0 && !strikeBelowCurrent
+          ? 'Strike price must be lower than the current underlying price on the day the contract is entered'
+          : 'Select an investor, instrument, quantity, and price',
+      );
       return;
     }
     setBusy(mode);
 
-    // entryUnderlyingPrice is the price of the UNDERLYING at entry, not the
-    // premium. Limited-risk option P/L is measured against it, so a position
-    // saved without it can only ever be marked at cost. For an option the
-    // Entry Price field IS that underlying, so there is no second field to
-    // fill in - only non-option instruments use the standalone one.
+    // entryUnderlyingPrice is recorded for reference. Option P/L is the broker
+    // strike versus the running underlying price, not this number.
     const entryUnderlyingNum = Number(isOptionsContract ? price : entryUnderlyingPrice);
     const contractFields = {
       // Checking optionType here as well as isOptionsContract is not
@@ -592,7 +596,14 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
                   <label className="text-xs uppercase" style={{ color: 'var(--sg-muted-2)', letterSpacing: '0.08em' }}>
                     Strike Price{isOptionsContract ? ' *' : ''}
                   </label>
-                  <input type="number" min="0" step="any" value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} placeholder="e.g. 200" className="sg-input mt-1.5" />
+                  <input type="number" min="0" step="any" value={strikePrice} onChange={(e) => setStrikePrice(e.target.value)} placeholder="e.g. 4300" className="sg-input mt-1.5" />
+                  {isOptionsContract && (
+                    <p className="text-[10px] mt-1" style={{ color: strikeNum > 0 && priceNum > 0 && !strikeBelowCurrent ? 'var(--sg-danger)' : 'var(--sg-muted-2)' }}>
+                      {strikeNum > 0 && priceNum > 0 && !strikeBelowCurrent
+                        ? 'Strike must be lower than the current underlying price on the day the contract is entered.'
+                        : 'P/L basis, and it is always below the current price on entry day. Each $1 the current price moves in the client\'s favor pays $100 per contract — up for a call, down for a put.'}
+                    </p>
+                  )}
                 </div>
               </>
             )}
@@ -637,8 +648,8 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
               <input type="number" min="0" step="any" value={price} onChange={(e) => setPrice(e.target.value)} className="sg-input mt-1.5" />
               {isOptionsContract && (
                 <p className="text-[10px] mt-1" style={{ color: 'var(--sg-muted-2)' }}>
-                  Market price of the underlying at entry, per unit (e.g. 4300 per troy oz). P/L is
-                  measured against this — it does not affect what the client is charged.
+                  Market price of the underlying at entry, per unit. Recorded for reference.
+                  P/L uses the strike against the running price, not this number.
                 </p>
               )}
             </div>
@@ -673,10 +684,9 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
                   disabled
                   style={{ color: contractMultiplier ? undefined : 'var(--sg-danger)' }}
                 />
-                <p className="text-[10px] mt-1" style={{ color: contractMultiplier ? 'var(--sg-muted-2)' : 'var(--sg-danger)' }}>
-                  {contractMultiplier
-                    ? `Each $1 move in the underlying pays ${fmt(contractMultiplier)} per contract.`
-                    : 'No contract unit on this instrument — P/L cannot be calculated and the position will mark at cost. Set it in Asset Management first.'}
+                <p className="text-[10px] mt-1" style={{ color: 'var(--sg-muted-2)' }}>
+                  Catalog contract size. Option P/L does not use this — it is $100 per contract for each $1
+                  in the client&apos;s favor, measured from the strike.
                 </p>
               </div>
             )}
@@ -694,8 +704,8 @@ export default function AdminTradeEntryPanel({ onOrderPlaced }: Props) {
                 className="sg-input mt-1.5"
               />
               <p className="text-[10px] mt-1" style={{ color: 'var(--sg-muted-2)' }}>
-                Market price of the underlying, per unit. P/L is measured against this — leave
-                blank and the position can only be marked at cost.
+                Market price of the underlying at entry, per unit. Option P/L uses the strike
+                against the running price ($100 per contract per $1 in the client&apos;s favor).
               </p>
             </div>
             <div>
