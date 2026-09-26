@@ -172,9 +172,12 @@ export default function InvestorDashboardPage() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
-          Welcome back, {displayName}. Here&apos;s what&apos;s happening with your investments today.
+        <h1 className="text-lg font-semibold leading-snug" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
+          Welcome back, {displayName}
         </h1>
+        <p className="text-sm mt-1" style={{ color: 'var(--sg-muted)' }}>
+          Here&apos;s what&apos;s happening with your investments today.
+        </p>
       </div>
 
       <div

@@ -402,12 +402,11 @@ export default function InvestorWorkspaceLayout() {
               onClick={() => setNavOpen(true)}
               aria-label="Open menu"
               aria-expanded={navOpen}
-              className="sg-tap-target lg:hidden -ml-2"
+              className="lg:!hidden -ml-2 inline-flex items-center justify-center min-w-11 min-h-11"
               style={{ color: 'var(--sg-text)' }}
             >
               <Menu className="h-5 w-5" />
             </button>
-            <img src="/logo.png" alt="" className="h-7 sm:h-8 w-auto max-w-[130px] sm:max-w-[160px] object-contain" />
             <div className="flex items-center gap-3 ml-auto">
               <ThemeToggle />
               {/* Trade Desk entry: always visible; standard-tier clients see a
