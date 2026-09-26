@@ -15,6 +15,7 @@ export const LIVE_COLLECTIONS = {
   supportTickets: 'supportTickets',
   auditLogs: 'auditLogs',
   kycSubmissions: 'kycSubmissions',
+  kycDocuments: 'kycDocuments',
   strategies: 'strategies',
   aiSignals: 'aiSignals',
   aiUsage: 'aiUsage',

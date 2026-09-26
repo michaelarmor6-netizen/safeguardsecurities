@@ -38,13 +38,15 @@ service firebase.storage {
         && request.resource.size < 10 * 1024 * 1024; // 10MB limit for documents
     }
 
-    // KYC documents - owner can upload their own, only investor admins can read (for review)
+    // KYC documents - owner uploads and may delete a file before approval.
+    // Investor admins can read the file while reviewing it.
     match /kyc/{userId}/{allPaths=**} {
       allow read: if request.auth != null && (request.auth.uid == userId || isInvestorAdmin());
-      allow write: if request.auth != null
+      allow create: if request.auth != null
         && request.auth.uid == userId
-        && request.resource.size < 10 * 1024 * 1024 // 10MB limit
+        && request.resource.size < 50 * 1024 * 1024
         && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+      allow delete: if request.auth != null && (request.auth.uid == userId || isInvestorAdmin());
     }
 
     // CRM import originals - the audit-trail archive of every lead file an

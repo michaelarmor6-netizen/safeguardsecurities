@@ -1,7 +1,8 @@
-import { addDoc, collection, doc, getDocs, orderBy, query, updateDoc, where, type DocumentData } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { addDoc, collection, doc, getDocs, orderBy, query, serverTimestamp, updateDoc, where, type DocumentData } from 'firebase/firestore';
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
+import { isKycDocType, resolveKycUpload, type KycDocStatus, type KycDocType } from '../../lib/kycDocuments';
 
 export interface KycSubmission {
   id: string;
@@ -94,5 +95,108 @@ export async function reviewKyc(id: string, status: 'verified' | 'rejected', rev
     status,
     reviewNote: reviewNote ?? null,
     updatedAt: new Date(),
+  });
+}
+
+export interface KycDocument {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  clientName: string;
+  docType: string;
+  fileName: string;
+  storagePath?: string;
+  fileUrl?: string;
+  fileRemoved: boolean;
+  status: KycDocStatus;
+  reviewNote?: string;
+  submittedAt?: Date;
+}
+
+function mapDocument(id: string, data: DocumentData): KycDocument {
+  return {
+    id,
+    userId: data.userId ?? '',
+    userEmail: data.userEmail,
+    clientName: data.clientName ?? '',
+    docType: data.docType ?? '',
+    fileName: data.fileName ?? '',
+    storagePath: data.storagePath,
+    fileUrl: data.fileUrl,
+    fileRemoved: data.fileRemoved === true,
+    status: data.status ?? 'pending',
+    reviewNote: data.reviewNote,
+    submittedAt: data.submittedAt?.toDate?.(),
+  };
+}
+
+export async function uploadIdentityDocument(input: {
+  userId: string;
+  userEmail: string;
+  clientName: string;
+  docType: KycDocType;
+  file: File;
+}): Promise<void> {
+  const resolved = resolveKycUpload(input.file);
+  if (!resolved.ok) throw new Error(resolved.error);
+  if (!isKycDocType(input.docType)) throw new Error('Select a document type.');
+
+  const safeName = input.file.name.replace(/[^\w.\-]+/g, '_');
+  const storagePath = `kyc/${input.userId}/${Date.now()}_${safeName}`;
+  const fileRef = ref(storage, storagePath);
+  await uploadBytes(fileRef, input.file, { contentType: resolved.contentType });
+  const fileUrl = await getDownloadURL(fileRef);
+
+  await addDoc(collection(db, LIVE_COLLECTIONS.kycDocuments), {
+    userId: input.userId,
+    userEmail: input.userEmail,
+    clientName: input.clientName,
+    docType: input.docType,
+    fileName: input.file.name,
+    storagePath,
+    fileUrl,
+    fileRemoved: false,
+    status: 'pending',
+    submittedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function getKycDocumentsForUser(userId: string): Promise<KycDocument[]> {
+  const snap = await getDocs(
+    query(collection(db, LIVE_COLLECTIONS.kycDocuments), where('userId', '==', userId), orderBy('submittedAt', 'desc')),
+  );
+  return snap.docs.map((d) => mapDocument(d.id, d.data()));
+}
+
+export async function getAllKycDocuments(): Promise<KycDocument[]> {
+  const snap = await getDocs(query(collection(db, LIVE_COLLECTIONS.kycDocuments), orderBy('submittedAt', 'desc')));
+  return snap.docs.map((d) => mapDocument(d.id, d.data()));
+}
+
+export async function removeIdentityDocument(docRow: KycDocument): Promise<void> {
+  if (docRow.status === 'approved') throw new Error('Approved documents cannot be removed.');
+  if (docRow.storagePath && !docRow.fileRemoved) {
+    await deleteObject(ref(storage, docRow.storagePath));
+  }
+  await updateDoc(doc(db, LIVE_COLLECTIONS.kycDocuments, docRow.id), {
+    fileRemoved: true,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function reviewIdentityDocument(
+  id: string,
+  status: 'approved' | 'rejected',
+  reviewNote?: string,
+) {
+  if (status === 'rejected' && !reviewNote?.trim()) {
+    throw new Error('Add a note explaining the rejection.');
+  }
+  await updateDoc(doc(db, LIVE_COLLECTIONS.kycDocuments, id), {
+    status,
+    reviewNote: status === 'rejected' ? reviewNote?.trim() : null,
+    reviewedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   });
 }

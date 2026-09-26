@@ -395,6 +395,25 @@ service cloud.firestore {
       allow delete: if isSuperAdmin();
     }
 
+    // One row per uploaded identity document. The client files it as pending.
+    // Compliance approves or rejects it. The client may only mark a file
+    // removed, and only before it is approved, so the review record stays.
+    match /kycDocuments/{documentId} {
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || isInvestorAdmin());
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.docType is string
+        && request.resource.data.fileName is string;
+      allow update: if isCompliance()
+        || (request.auth != null
+          && resource.data.userId == request.auth.uid
+          && resource.data.status != 'approved'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fileRemoved', 'updatedAt']));
+      allow delete: if isSuperAdmin();
+    }
+
     // Admin-defined model portfolio strategies - admin-only
     match /strategies/{strategyId} {
       allow read, write: if isInvestorAdmin();

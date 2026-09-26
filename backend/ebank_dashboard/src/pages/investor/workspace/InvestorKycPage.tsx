@@ -1,168 +1,283 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ShieldCheck } from 'lucide-react';
+import { CheckCircle2, Clock, FileText, ShieldCheck, Trash2, Upload, XCircle } from 'lucide-react';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import {
-  getKycSubmissionsForUser,
-  submitKyc,
-  uploadKycDocument,
-  type KycSubmission,
+  KYC_ACCEPT,
+  KYC_DOC_TYPES,
+  KYC_MAX_LABEL,
+  isKycDocType,
+  kycDocLabel,
+  resolveKycUpload,
+  type KycDocStatus,
+} from '../../../lib/kycDocuments';
+import {
+  getKycDocumentsForUser,
+  removeIdentityDocument,
+  uploadIdentityDocument,
+  type KycDocument,
 } from '../../../services/investor/kycService';
 
-const statusColor: Record<KycSubmission['status'], string> = {
-  pending: 'var(--sg-gold)',
-  verified: 'var(--sg-teal)',
-  rejected: 'var(--sg-danger)',
+const statusStyle: Record<KycDocStatus, { color: string; label: string; icon: typeof Clock }> = {
+  pending: { color: 'var(--sg-gold)', label: 'Pending review', icon: Clock },
+  approved: { color: 'var(--sg-teal)', label: 'Approved', icon: CheckCircle2 },
+  rejected: { color: 'var(--sg-danger)', label: 'Rejected', icon: XCircle },
 };
 
 export default function InvestorKycPage() {
   const { user, profile } = useInvestorAuth();
-  const [submissions, setSubmissions] = useState<KycSubmission[]>([]);
+  const [docs, setDocs] = useState<KycDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-
-  const [fullName, setFullName] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
-  const [address, setAddress] = useState('');
-  const [phone, setPhone] = useState('');
-  const [idType, setIdType] = useState('passport');
-  const [idNumber, setIdNumber] = useState('');
+  const [docType, setDocType] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const docLabel = useMemo(() => KYC_DOC_TYPES.find((d) => d.value === docType)?.label ?? '', [docType]);
+  const isPdf = !!file && /\.pdf$/i.test(file.name);
 
   const load = () => {
     if (!user) return;
-    getKycSubmissionsForUser(user.uid)
-      .then(setSubmissions)
-      .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load KYC status'))
+    setLoading(true);
+    getKycDocumentsForUser(user.uid)
+      .then(setDocs)
+      .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load documents'))
       .finally(() => setLoading(false));
   };
 
   useEffect(load, [user]);
 
-  const latest = submissions[0];
-  const canSubmit = !latest || latest.status === 'rejected';
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-    if (!fullName.trim() || !dateOfBirth || !address.trim() || !phone.trim() || !idNumber.trim()) {
-      toast.error('Fill in all fields');
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
       return;
     }
-    setSubmitting(true);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  const pickFile = (next: File | null) => {
+    if (!next) {
+      setFile(null);
+      return;
+    }
+    const resolved = resolveKycUpload(next);
+    if (!resolved.ok) {
+      toast.error(resolved.error);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
+    setFile(next);
+  };
+
+  const submit = async () => {
+    if (!user) return;
+    if (!file) {
+      toast.error('Choose a file to upload.');
+      return;
+    }
+    if (!isKycDocType(docType)) {
+      toast.error('Select a document type.');
+      return;
+    }
+    const clientName = [profile?.firstName, profile?.lastName].filter(Boolean).join(' ')
+      || profile?.displayName
+      || profile?.email
+      || 'Client';
+    setUploading(true);
+    setProgress(30);
     try {
-      let idDocumentUrl: string | undefined;
-      if (file) {
-        idDocumentUrl = await uploadKycDocument(user.uid, file);
-      }
-      await submitKyc({
+      setProgress(70);
+      await uploadIdentityDocument({
         userId: user.uid,
         userEmail: profile?.email ?? user.email ?? '',
-        fullName: fullName.trim(),
-        dateOfBirth,
-        address: address.trim(),
-        phone: phone.trim(),
-        idType,
-        idNumber: idNumber.trim(),
-        idDocumentUrl,
+        clientName,
+        docType,
+        file,
       });
-      toast.success('KYC submitted for review');
-      setFullName('');
-      setDateOfBirth('');
-      setAddress('');
-      setPhone('');
-      setIdNumber('');
+      setProgress(100);
+      toast.success(`${docLabel || 'Document'} uploaded. Status: pending review.`);
       setFile(null);
+      setDocType('');
+      if (inputRef.current) inputRef.current.value = '';
+      window.setTimeout(() => setProgress(0), 600);
       load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Failed to submit KYC');
+      setProgress(0);
+      toast.error(e instanceof Error ? e.message : 'Upload failed.');
     } finally {
-      setSubmitting(false);
+      setUploading(false);
     }
   };
 
-  if (loading) {
-    return <div className="py-20 text-center" style={{ color: 'var(--sg-muted)' }}>Loading verification status...</div>;
-  }
+  const remove = async (row: KycDocument) => {
+    if (row.status === 'approved') {
+      toast.error('Approved documents cannot be removed.');
+      return;
+    }
+    try {
+      await removeIdentityDocument(row);
+      toast.success('File removed. The record is kept for audit.');
+      load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not remove file.');
+    }
+  };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto space-y-6">
       <div>
         <h1 className="sg-page-title flex items-center gap-2">
           <ShieldCheck className="h-5 w-5" style={{ color: 'var(--sg-indigo)' }} />
-          Identity Verification
+          Identity verification
         </h1>
-        <p className="sg-page-sub mt-1">Complete KYC verification to unlock full account access.</p>
+        <p className="sg-page-sub mt-1">
+          Upload each required document. Files are stored for you and the compliance team only.
+        </p>
       </div>
 
-      {latest && (
-        <div className="sg-card p-4" style={{ borderRadius: 14 }}>
-          <div className="flex items-center justify-between">
-            <p className="text-sm" style={{ color: 'var(--sg-muted)' }}>Current status</p>
-            <span className="text-xs font-semibold uppercase" style={{ color: statusColor[latest.status] }}>
-              {latest.status}
-            </span>
-          </div>
-          {latest.reviewNote && (
-            <p className="text-sm mt-2" style={{ color: 'var(--sg-muted)' }}>{latest.reviewNote}</p>
-          )}
+      <section className="sg-card p-5 space-y-4" style={{ borderRadius: 14 }}>
+        <div>
+          <h2 className="font-semibold" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
+            Upload a document
+          </h2>
+          <p className="text-sm mt-1" style={{ color: 'var(--sg-muted)' }}>
+            PDF, JPEG, PNG, WebP, or HEIC, up to {KYC_MAX_LABEL}.
+          </p>
         </div>
-      )}
-
-      {canSubmit ? (
-        <form onSubmit={submit} className="sg-card p-5 space-y-4" style={{ borderRadius: 14 }}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>Full Legal Name</label>
-              <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} className="sg-input mt-2" />
-            </div>
-            <div>
-              <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>Date of Birth</label>
-              <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="sg-input mt-2" />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-sm" style={{ color: 'var(--sg-muted)' }} htmlFor="kyc-doc-type">Document type</label>
+            <select id="kyc-doc-type" value={docType} onChange={(e) => setDocType(e.target.value)} className="sg-input mt-2">
+              <option value="">Select document type</option>
+              {KYC_DOC_TYPES.map((d) => (
+                <option key={d.value} value={d.value}>{d.label}</option>
+              ))}
+            </select>
           </div>
           <div>
-            <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>Residential Address</label>
-            <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} className="sg-input mt-2" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>Phone Number</label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} className="sg-input mt-2" />
-            </div>
-            <div>
-              <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>ID Type</label>
-              <select value={idType} onChange={(e) => setIdType(e.target.value)} className="sg-input mt-2">
-                <option value="passport">Passport</option>
-                <option value="drivers_license">Driver's License</option>
-                <option value="national_id">National ID</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>ID Number</label>
-            <input type="text" value={idNumber} onChange={(e) => setIdNumber(e.target.value)} className="sg-input mt-2" />
-          </div>
-          <div>
-            <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>ID Document (image or PDF, max 10MB)</label>
+            <label className="text-sm" style={{ color: 'var(--sg-muted)' }} htmlFor="kyc-doc-file">File</label>
             <input
+              ref={inputRef}
+              id="kyc-doc-file"
               type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              accept={KYC_ACCEPT}
+              onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
               className="sg-input mt-2"
             />
           </div>
-          <button type="submit" disabled={submitting} className="sg-btn-primary">
-            {submitting ? 'Submitting...' : 'Submit for Verification'}
-          </button>
-        </form>
-      ) : (
-        <div className="sg-panel p-8 text-center sg-text-muted">
-          {latest?.status === 'pending'
-            ? 'Your verification is under review. We\'ll update your status once it\'s reviewed.'
-            : 'Your identity has been verified.'}
         </div>
-      )}
+
+        {file && (
+          <div className="rounded-xl p-4" style={{ border: '1px solid var(--sg-border)', background: 'var(--sg-bg-elevated)' }}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-4 w-4 shrink-0" style={{ color: 'var(--sg-muted)' }} />
+                <span className="truncate text-sm font-medium sg-text-main">{file.name}</span>
+                <span className="text-xs shrink-0" style={{ color: 'var(--sg-muted-2)' }}>
+                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                </span>
+              </div>
+              <button
+                type="button"
+                className="sg-btn-ghost text-xs"
+                onClick={() => {
+                  setFile(null);
+                  if (inputRef.current) inputRef.current.value = '';
+                }}
+              >
+                Remove
+              </button>
+            </div>
+            {previewUrl && (
+              <div className="mt-3 overflow-hidden rounded-lg" style={{ border: '1px solid var(--sg-border)' }}>
+                {isPdf ? (
+                  <iframe src={previewUrl} title="PDF preview" className="h-72 w-full" />
+                ) : (
+                  <img src={previewUrl} alt="Document preview" className="max-h-72 w-full object-contain" />
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {progress > 0 && (
+          <div>
+            <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--sg-border)' }}>
+              <div className="h-full" style={{ width: `${progress}%`, background: 'var(--sg-indigo)' }} />
+            </div>
+            <p className="text-xs mt-1" style={{ color: 'var(--sg-muted)' }}>{progress < 100 ? 'Uploading…' : 'Done'}</p>
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <button type="button" className="sg-btn-primary flex items-center gap-2" disabled={uploading || !file} onClick={submit}>
+            <Upload className="h-4 w-4" />
+            {uploading ? 'Uploading…' : `Submit ${docLabel || 'document'}`}
+          </button>
+        </div>
+      </section>
+
+      <section className="sg-card p-5" style={{ borderRadius: 14 }}>
+        <h2 className="font-semibold" style={{ fontFamily: 'var(--sg-font-display)', color: 'var(--sg-text)' }}>
+          Submitted documents
+        </h2>
+        <p className="text-sm mt-1 mb-3" style={{ color: 'var(--sg-muted)' }}>
+          Each file is reviewed on its own.
+        </p>
+        {loading ? (
+          <p className="text-sm" style={{ color: 'var(--sg-muted)' }}>Loading…</p>
+        ) : docs.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--sg-muted)' }}>No documents submitted yet.</p>
+        ) : (
+          <ul className="divide-y" style={{ borderColor: 'var(--sg-border)' }}>
+            {docs.map((row) => {
+              const status = statusStyle[row.status] ?? statusStyle.pending;
+              const Icon = status.icon;
+              return (
+                <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 py-3 border-t sg-row-border first:border-t-0">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" style={{ color: 'var(--sg-muted)' }} />
+                      <span className="text-sm font-medium sg-text-main">{kycDocLabel(row.docType)}</span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase" style={{ color: status.color }}>
+                        <Icon className="h-3 w-3" />
+                        {status.label}
+                      </span>
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: 'var(--sg-muted-2)' }}>
+                      {row.fileRemoved ? 'File removed. Record kept for audit.' : row.fileName}
+                      {row.submittedAt ? ` · ${row.submittedAt.toLocaleString()}` : ''}
+                    </p>
+                    {row.reviewNote && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--sg-danger)' }}>Notes: {row.reviewNote}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!row.fileRemoved && row.fileUrl && (
+                      <a href={row.fileUrl} target="_blank" rel="noopener noreferrer" className="sg-btn-ghost text-xs">
+                        View
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      className="sg-btn-ghost text-xs"
+                      disabled={row.status === 'approved'}
+                      onClick={() => remove(row)}
+                      aria-label="Remove file"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

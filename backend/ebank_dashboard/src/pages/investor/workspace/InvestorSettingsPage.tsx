@@ -739,7 +739,7 @@ export default function InvestorSettingsPage() {
 
           {activeSection === 'identity' && (
             <>
-      <SectionCard icon={ShieldCheck} title="Identity Verification" description="Your KYC status with SafeGuard compliance.">
+      <SectionCard icon={ShieldCheck} title="Identity Verification" description="Upload a passport, license, proof of address, or the other documents compliance asks for. Each file is reviewed on its own.">
         {kycLoading ? (
           <p className="text-sm" style={{ color: 'var(--sg-muted-2)' }}>Loading...</p>
         ) : kyc ? (

@@ -57,6 +57,14 @@
       ]
     },
     {
+      "collectionGroup": "kycDocuments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "submittedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "kycSubmissions",
       "queryScope": "COLLECTION",
       "fields": [
