@@ -10,6 +10,12 @@
 // hour. previousPrice stays the prior session so "today" is still versus
 // yesterday, not versus the last hour.
 //
+// Tickers come from assets.underlyingPriceSymbol when set, and also from
+// contract-month symbols on assets and open holdings (GCU26, GCF27, GCZ27).
+// The catalog left underlyingPriceSymbol blank, so quoting only that field
+// wrote nothing. Spot (XAUUSD) and equities are skipped — they are not a
+// listed COMEX month, and a front-month or GLD proxy is the wrong basis.
+//
 //   FIREBASE_SERVICE_ACCOUNT  JSON of the hosting deploy service account
 //   DRY_RUN=1                 print quotes, do not write
 //   TICKERS=GCZ7,SIH26        skip the catalog and quote these (dry runs)
@@ -29,7 +35,8 @@ const EXCHANGE_SUFFIX = {
 
 /** Massive/catalog ticker (GCZ7, GCZ27) -> Yahoo contract (GCZ27.CMX). */
 export function yahooSymbolFor(ticker) {
-  const match = /^([A-Z]{1,3})([FGHJKMNQUVXZ])(\d{1,4})$/.exec(String(ticker ?? '').trim().toUpperCase());
+  const raw = String(ticker ?? '').trim().toUpperCase();
+  const match = /^([A-Z]{1,3})([FGHJKMNQUVXZ])(\d{1,4})$/.exec(raw);
   if (!match) return null;
   const [, root, month, year] = match;
   const suffix = EXCHANGE_SUFFIX[root];
@@ -98,11 +105,21 @@ async function catalogTickers(db) {
     .map((t) => t.trim().toUpperCase())
     .filter(Boolean);
   if (fromEnv.length) return fromEnv;
-  const snap = await db.collection('assets').get();
   const tickers = new Set();
-  for (const doc of snap.docs) {
-    const t = doc.data()?.underlyingPriceSymbol;
-    if (typeof t === 'string' && t.trim()) tickers.add(t.trim().toUpperCase());
+  const assets = await db.collection('assets').get();
+  for (const doc of assets.docs) {
+    const data = doc.data();
+    const explicit = data?.underlyingPriceSymbol;
+    if (typeof explicit === 'string' && explicit.trim()) tickers.add(explicit.trim().toUpperCase());
+    const symbol = typeof data?.symbol === 'string' ? data.symbol.trim().toUpperCase() : '';
+    if (yahooSymbolFor(symbol)) tickers.add(symbol);
+  }
+  // Open positions whose symbol is itself the contract (GCF27) even when the
+  // catalog root (GC) never had underlyingPriceSymbol filled in.
+  const holdings = await db.collection('portfolioHoldings').get();
+  for (const doc of holdings.docs) {
+    const symbol = String(doc.data()?.symbol ?? '').trim().toUpperCase();
+    if (yahooSymbolFor(symbol)) tickers.add(symbol);
   }
   return [...tickers];
 }

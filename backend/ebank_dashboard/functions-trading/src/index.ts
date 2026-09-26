@@ -25,6 +25,8 @@ const WALLETS = 'wallets';
 const CASH_LEDGER = 'cashLedger';
 const ASSETS = 'assets';
 
+const CONTRACT_MONTH = /^[A-Z]{1,3}[FGHJKMNQUVXZ]\d{2}$/;
+
 const FINAL_STATUSES = new Set(['filled', 'cancelled', 'rejected', 'expired']);
 
 interface PlaceOrderPayload {
@@ -634,7 +636,9 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
   // calling Finnhub directly - this function needs no secrets of its own.
   const priceByAssetId = new Map<string, number>();
   const priceBySymbol = new Map<string, number>();
-  // Which underlying each instrument is marked against (e.g. GCZ27 -> C:XAUUSD).
+  // Which underlying each instrument is marked against, when the catalog
+  // field is set. A blank field falls back to the holding's own contract
+  // month (GCF27) below.
   const underlyingByAssetId = new Map<string, string>();
   const underlyingBySymbol = new Map<string, string>();
   for (const a of assetsSnap.docs) {
@@ -722,7 +726,8 @@ async function snapshotAllPortfolios(): Promise<{ snapshotted: number }> {
       // a flat line.
       const underlyingTicker =
         (data.assetId && underlyingByAssetId.get(data.assetId)) ??
-        underlyingBySymbol.get(symbol);
+        underlyingBySymbol.get(symbol) ??
+        (CONTRACT_MONTH.test(symbol) ? symbol : undefined);
       const mark = underlyingTicker ? underlyingPrice.get(underlyingTicker) : undefined;
       const opening = openingByKey.get(`${userId}|${symbol}`);
       const strikePrice = Number(data.strikePrice ?? 0) || opening?.strike || 0;

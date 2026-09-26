@@ -158,6 +158,19 @@ interface UnderlyingMark {
 // Same doc-id sanitisation functions-market uses when it writes marketPrices.
 const marketPriceDocId = (ticker: string) => ticker.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_');
 
+const CONTRACT_MONTH = /^[A-Z]{1,3}[FGHJKMNQUVXZ]\d{2}$/;
+
+// Catalog underlyingPriceSymbol when it is set. Existing books left that
+// field blank, so a contract-month holding (GCF27) is marked under its own
+// symbol. Spot (XAUUSD) and equities are not mapped onto a gold future.
+function markTickerFor(symbol: string, underlyingPriceSymbol?: string | null): string | undefined {
+  const explicit = underlyingPriceSymbol?.trim().toUpperCase();
+  if (explicit) return explicit;
+  const own = symbol.trim().toUpperCase();
+  if (CONTRACT_MONTH.test(own)) return own;
+  return undefined;
+}
+
 /**
  * Daily settlement marks for a set of underlying tickers, straight from
  * marketPrices - the SAME source the nightly snapshotPortfolios job values
@@ -205,10 +218,14 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
   const byId = new Map(catalog.map((a) => [a.id, a]));
   const bySymbol = new Map(catalog.map((a) => [a.symbol, a]));
 
-  // One read per distinct underlying: the daily settlement each derivative
-  // position marks against (assets carry underlyingPriceSymbol, e.g. GCZ27).
+  // One read per distinct underlying. Catalog underlyingPriceSymbol when it
+  // is set; otherwise the holding symbol itself when that symbol is the
+  // contract month (GCF27).
   const underlyingTickers = rows
-    .map((r) => ((r.assetId ? byId.get(r.assetId) : undefined) ?? bySymbol.get(r.symbol))?.underlyingPriceSymbol)
+    .map((r) => {
+      const asset = (r.assetId ? byId.get(r.assetId) : undefined) ?? bySymbol.get(r.symbol);
+      return markTickerFor(r.symbol, asset?.underlyingPriceSymbol);
+    })
     .filter((x): x is string => typeof x === 'string' && x.length > 0);
   const marks = await fetchUnderlyingMarks(underlyingTickers);
 
@@ -243,7 +260,7 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
     // contract. Put: each $1 down pays $100 per contract. Losses stop at the
     // premium. The current price is the underlying settlement — never the
     // premium and never a proxy quote.
-    const underlyingTicker = asset?.underlyingPriceSymbol?.trim().toUpperCase();
+    const underlyingTicker = markTickerFor(row.symbol, asset?.underlyingPriceSymbol);
     const mark = underlyingTicker ? marks.get(underlyingTicker) : undefined;
     const strikePrice = row.strikePrice ?? opening?.strike ?? 0;
     const optionType = row.optionType ?? opening?.optionType;
