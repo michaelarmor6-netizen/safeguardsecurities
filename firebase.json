@@ -46,22 +46,22 @@
       "redirects": [
         {
           "source": "/login",
-          "destination": "https://app.safeguardsecurities.us/login",
+          "destination": "https://app.safeguardsecurities.us/login?v=2",
           "type": 301
         },
         {
           "source": "/login.html",
-          "destination": "https://app.safeguardsecurities.us/login",
+          "destination": "https://app.safeguardsecurities.us/login?v=2",
           "type": 301
         },
         {
           "source": "/signin",
-          "destination": "https://app.safeguardsecurities.us/login",
+          "destination": "https://app.safeguardsecurities.us/login?v=2",
           "type": 301
         },
         {
           "source": "/register",
-          "destination": "https://app.safeguardsecurities.us/login",
+          "destination": "https://app.safeguardsecurities.us/login?v=2",
           "type": 301
         },
         {
@@ -123,6 +123,24 @@
         }
       ],
       "headers": [
+        {
+          "source": "/",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
+        {
+          "source": "**/*.html",
+          "headers": [
+            {
+              "key": "Cache-Control",
+              "value": "no-cache"
+            }
+          ]
+        },
         {
           "source": "/login.html",
           "headers": [

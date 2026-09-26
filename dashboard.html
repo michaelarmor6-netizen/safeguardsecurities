@@ -397,7 +397,7 @@
     }
 
     function redirectToLogin() {
-      window.location.replace("https://app.safeguardsecurities.us/login");
+      window.location.replace("https://app.safeguardsecurities.us/login?v=2");
     }
 
     document.addEventListener("DOMContentLoaded", function () {
@@ -473,7 +473,7 @@
 
     document.getElementById("logout-button").addEventListener("click", async function () {
       await auth.signOut();
-      window.location.replace("https://app.safeguardsecurities.us/login");
+      window.location.replace("https://app.safeguardsecurities.us/login?v=2");
     });
   </script>
 </body>
