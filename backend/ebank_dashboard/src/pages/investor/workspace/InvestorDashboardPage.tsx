@@ -7,6 +7,7 @@ import { formatInvoiceMoney, getInvoicesForUser, invoiceTotal, type StaffInvoice
 import {
   getPortfolioStatsForUser,
   getUserPortfolio,
+  PORTFOLIO_MARK_REFRESH_MS,
   type PortfolioHolding,
   type PortfolioStats,
 } from '../../../services/investor/portfolioService';
@@ -98,22 +99,36 @@ export default function InvestorDashboardPage() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([
-      getUserPortfolio(user.uid),
-      getPortfolioStatsForUser(user.uid),
-      getUserWallet(user.uid),
-      getPortfolioHistory(user.uid),
-      getInvoicesForUser(user.uid).catch(() => [] as StaffInvoice[]),
-    ])
-      .then(([h, s, w, hist, inv]) => {
-        setHoldings(h);
-        setStats(s);
-        setWalletBalance(w?.balance ?? 0);
-        setHistory(hist);
-        setInvoices(inv.filter((i) => i.status !== 'void').slice(0, 3));
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load portfolio'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const load = (initial: boolean) => {
+      Promise.all([
+        getUserPortfolio(user.uid),
+        getPortfolioStatsForUser(user.uid),
+        getUserWallet(user.uid),
+        getPortfolioHistory(user.uid),
+        getInvoicesForUser(user.uid).catch(() => [] as StaffInvoice[]),
+      ])
+        .then(([h, s, w, hist, inv]) => {
+          if (cancelled) return;
+          setHoldings(h);
+          setStats(s);
+          setWalletBalance(w?.balance ?? 0);
+          setHistory(hist);
+          setInvoices(inv.filter((i) => i.status !== 'void').slice(0, 3));
+        })
+        .catch((e) => {
+          if (!cancelled) toast.error(e instanceof Error ? e.message : 'Failed to load portfolio');
+        })
+        .finally(() => {
+          if (initial && !cancelled) setLoading(false);
+        });
+    };
+    load(true);
+    const timer = window.setInterval(() => load(false), PORTFOLIO_MARK_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [user]);
 
   // Real daily snapshots (see functions-trading's snapshotPortfolios) - not

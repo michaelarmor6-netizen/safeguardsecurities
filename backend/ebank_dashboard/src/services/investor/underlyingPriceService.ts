@@ -1,17 +1,17 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
 
-// Daily reference price for the UNDERLYING behind a derivative position.
+// Three ways a price lands in marketPrices, and the portfolio reads them
+// the same way:
+//   1. Hourly - GitHub Actions runs scripts/refresh-underlying-marks.mjs and
+//      writes the latest completed hour of the listed contract. This is the
+//      one that runs without the Blaze plan.
+//   2. Daily settlement - the Massive futures job, which needs Blaze plus a
+//      futures subscription. It does not run while billing is off.
+//   3. Manual - the desk posts the day's settlement here.
 //
-// Two ways a price lands in marketPrices, and the portfolio snapshot treats
-// them identically:
-//   1. Automatic - the Massive FUTURES API, which needs its own (free)
-//      subscription on that asset class. Requires underlyingPriceSymbol on the
-//      asset.
-//   2. Manual - the desk posts the day's settlement here.
-//
-// If neither has happened, option positions mark at cost. That is the correct
-// fallback: an unmarked position is better than a guessed one.
+// A manual price posted for today is left in place. An unmarked position
+// still marks at cost rather than at a guessed proxy.
 
 export interface UnderlyingPriceRow {
   ticker: string;

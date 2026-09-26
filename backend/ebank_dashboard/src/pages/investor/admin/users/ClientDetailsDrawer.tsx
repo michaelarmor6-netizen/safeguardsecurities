@@ -5,7 +5,7 @@ import type { InvestorProfile } from '../../../../services/investor/profileServi
 import { getUserWallet } from '../../../../services/investor/walletService';
 import { backfillDepositLedger, getFundingRequestsForUser, requestReference, type FundingRequest } from '../../../../services/investor/fundingService';
 import { getKycSubmissionsForUser, type KycSubmission } from '../../../../services/investor/kycService';
-import { getUserPortfolio, getPortfolioStatsForUser, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
+import { getUserPortfolio, getPortfolioStatsForUser, PORTFOLIO_MARK_REFRESH_MS, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
 import { getPortfolioHistory, type PortfolioSnapshot } from '../../../../services/investor/portfolioHistoryService';
 import { getTradesForUser, type Trade } from '../../../../services/investor/tradesService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
@@ -136,6 +136,21 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [profile.id, reloadKey, canViewBook]);
+
+  // The hourly mark job updates marketPrices. Re-read P/L while this drawer
+  // stays open so the desk does not have to close and reopen it.
+  useEffect(() => {
+    if (!canViewBook) return;
+    const timer = window.setInterval(() => {
+      Promise.all([getUserPortfolio(profile.id), getPortfolioStatsForUser(profile.id)])
+        .then(([h, s]) => {
+          setHoldings(h);
+          setStats(s);
+        })
+        .catch(() => {});
+    }, PORTFOLIO_MARK_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [profile.id, canViewBook]);
 
   // Deposits credited before the ledger fix never posted a cashLedger entry,
   // so this client's statement has no closing balance (or a stale one). This

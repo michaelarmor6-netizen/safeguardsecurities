@@ -7,6 +7,7 @@ import { termsForSet } from '../../../lib/assetTerminology';
 import {
   getPortfolioStatsForUser,
   getUserPortfolio,
+  PORTFOLIO_MARK_REFRESH_MS,
   type PortfolioHolding,
   type PortfolioStats,
 } from '../../../services/investor/portfolioService';
@@ -24,13 +25,27 @@ export default function InvestorPortfolioPage() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([getUserPortfolio(user.uid), getPortfolioStatsForUser(user.uid)])
-      .then(([h, s]) => {
-        setHoldings(h);
-        setStats(s);
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load portfolio'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const load = (initial: boolean) => {
+      Promise.all([getUserPortfolio(user.uid), getPortfolioStatsForUser(user.uid)])
+        .then(([h, s]) => {
+          if (cancelled) return;
+          setHoldings(h);
+          setStats(s);
+        })
+        .catch((e) => {
+          if (!cancelled) toast.error(e instanceof Error ? e.message : 'Failed to load portfolio');
+        })
+        .finally(() => {
+          if (initial && !cancelled) setLoading(false);
+        });
+    };
+    load(true);
+    const timer = window.setInterval(() => load(false), PORTFOLIO_MARK_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [user]);
 
   if (loading) {

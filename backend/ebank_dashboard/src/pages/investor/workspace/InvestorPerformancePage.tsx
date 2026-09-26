@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ArrowDownRight, ArrowUpRight, TrendingUp } from 'lucide-react';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
-import { getPortfolioStatsForUser, type PortfolioStats } from '../../../services/investor/portfolioService';
+import { getPortfolioStatsForUser, PORTFOLIO_MARK_REFRESH_MS, type PortfolioStats } from '../../../services/investor/portfolioService';
 import { getPortfolioHistory, type PortfolioSnapshot } from '../../../services/investor/portfolioHistoryService';
 import PortfolioMiniChart from '../../../components/investor/PortfolioMiniChart';
 
@@ -19,13 +19,27 @@ export default function InvestorPerformancePage() {
 
   useEffect(() => {
     if (!user) return;
-    Promise.all([getPortfolioStatsForUser(user.uid), getPortfolioHistory(user.uid)])
-      .then(([s, hist]) => {
-        setStats(s);
-        setHistory(hist);
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : 'Failed to load performance'))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    const load = (initial: boolean) => {
+      Promise.all([getPortfolioStatsForUser(user.uid), getPortfolioHistory(user.uid)])
+        .then(([s, hist]) => {
+          if (cancelled) return;
+          setStats(s);
+          setHistory(hist);
+        })
+        .catch((e) => {
+          if (!cancelled) toast.error(e instanceof Error ? e.message : 'Failed to load performance');
+        })
+        .finally(() => {
+          if (initial && !cancelled) setLoading(false);
+        });
+    };
+    load(true);
+    const timer = window.setInterval(() => load(false), PORTFOLIO_MARK_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [user]);
 
   const rangeDays = range === '30D' ? 30 : range === '90D' ? 90 : range === '1Y' ? 365 : Infinity;

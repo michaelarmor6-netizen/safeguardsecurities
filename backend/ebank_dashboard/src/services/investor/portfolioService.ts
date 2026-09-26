@@ -62,6 +62,9 @@ export interface PortfolioStats {
   holdingsCount: number;
 }
 
+/** Open screens re-read marks on this interval. The hourly job writes them. */
+export const PORTFOLIO_MARK_REFRESH_MS = 30 * 60 * 1000;
+
 function mapRawHolding(id: string, data: DocumentData): Omit<PortfolioHolding, 'price' | 'change' | 'changePercent' | 'value' | 'allocation'> {
   const shares = Number(data.shares ?? data.quantity ?? 0);
   return {

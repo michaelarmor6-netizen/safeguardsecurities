@@ -28,6 +28,7 @@ import ThemeToggle from '../../../components/ui/ThemeToggle';
 import {
   getPortfolioStatsForUser,
   getUserPortfolio,
+  PORTFOLIO_MARK_REFRESH_MS,
   type PortfolioHolding,
   type PortfolioStats,
 } from '../../../services/investor/portfolioService';
@@ -172,6 +173,12 @@ export default function InvestorTradeDeskPage() {
   };
 
   useEffect(load, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const timer = window.setInterval(load, PORTFOLIO_MARK_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [user]);
 
   if (loading) {
     return (
