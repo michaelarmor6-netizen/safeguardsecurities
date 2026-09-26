@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Download, Edit2, Search } from 'lucide-react';
 import { getAllTrades, type Trade } from '../../../../services/investor/tradesService';
-import { correctPositionTerms } from '../../../../services/investor/tradingService';
+import { correctPositionTerms, loadPositionEntries } from '../../../../services/investor/tradingService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../../services/investor/auditService';
 
@@ -48,12 +48,16 @@ function downloadCsv(rows: Trade[]) {
   URL.revokeObjectURL(url);
 }
 
-function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) {
+function CorrectionRow({ trade, entryPrice, onDone }: { trade: Trade; entryPrice?: number; onDone: () => void }) {
   const { user, profile } = useInvestorAuth();
   const [editing, setEditing] = useState(false);
   const [strike, setStrike] = useState(trade.strikePrice != null ? String(trade.strikePrice) : '');
-  const [entry, setEntry] = useState('');
+  const [entry, setEntry] = useState(entryPrice != null ? String(entryPrice) : '');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (entry === '' && entryPrice != null && entryPrice > 0) setEntry(String(entryPrice));
+  }, [entry, entryPrice]);
 
   if (!editing) {
     return (
@@ -66,8 +70,12 @@ function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) 
   const save = async () => {
     const strikeNum = Number(strike);
     const entryNum = Number(entry);
-    if (!(strikeNum > 0) || !(entryNum > 0)) {
-      toast.error('Enter both the strike and the entry price.');
+    if (!(strikeNum > 0)) {
+      toast.error('Enter the strike price.');
+      return;
+    }
+    if (!(entryNum > 0)) {
+      toast.error('Entry price is blank. Type the underlying price from the day this contract was entered.');
       return;
     }
     setSaving(true);
@@ -90,25 +98,29 @@ function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) 
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <input
-        type="number"
-        min="0"
-        step="any"
-        value={strike}
-        onChange={(e) => setStrike(e.target.value)}
-        placeholder="Strike"
-        className="sg-input py-1 px-2 text-xs w-24"
-      />
-      <input
-        type="number"
-        min="0"
-        step="any"
-        value={entry}
-        onChange={(e) => setEntry(e.target.value)}
-        placeholder="Entry"
-        className="sg-input py-1 px-2 text-xs w-24"
-      />
+    <div className="flex flex-wrap items-end gap-1.5">
+      <label className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--sg-muted-2)' }}>
+        Strike
+        <input
+          type="number"
+          min="0"
+          step="any"
+          value={strike}
+          onChange={(e) => setStrike(e.target.value)}
+          className="sg-input mt-1 py-1 px-2 text-xs w-24 block"
+        />
+      </label>
+      <label className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--sg-muted-2)' }}>
+        Entry
+        <input
+          type="number"
+          min="0"
+          step="any"
+          value={entry}
+          onChange={(e) => setEntry(e.target.value)}
+          className="sg-input mt-1 py-1 px-2 text-xs w-24 block"
+        />
+      </label>
       <button type="button" className="sg-action-btn text-xs px-2 py-1" disabled={saving} onClick={save}>
         {saving ? 'Saving...' : 'Save'}
       </button>
@@ -119,13 +131,17 @@ function CorrectionRow({ trade, onDone }: { trade: Trade; onDone: () => void }) 
 
 export default function AdminExecutedTrades() {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [entries, setEntries] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
   const load = () => {
     setLoading(true);
-    getAllTrades()
-      .then(setTrades)
+    Promise.all([getAllTrades(), loadPositionEntries()])
+      .then(([rows, entryMap]) => {
+        setTrades(rows);
+        setEntries(entryMap);
+      })
       .catch((err) => toast.error(err instanceof Error ? err.message : 'Failed to load executed trades'))
       .finally(() => setLoading(false));
   };
@@ -202,7 +218,11 @@ export default function AdminExecutedTrades() {
                 </td>
                 <td className="p-3 sg-text-faint text-xs">{t.remarks}</td>
                 <td className="p-3">
-                  <CorrectionRow trade={t} onDone={load} />
+                  <CorrectionRow
+                    trade={t}
+                    entryPrice={entries.get(`${t.userId}|${t.symbol.trim().toUpperCase()}`)}
+                    onDone={load}
+                  />
                 </td>
               </tr>
             ))}

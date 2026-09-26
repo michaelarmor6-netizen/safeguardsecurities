@@ -127,6 +127,30 @@ export async function updateTradeContract(payload: UpdateTradeContractPayload) {
   await updateTradeContractFn(payload);
 }
 
+// Entry price lives on the holding and the filled order, not on the trade row.
+// Keyed by userId|SYMBOL so the trade editor can show the current entry.
+export async function loadPositionEntries(): Promise<Map<string, number>> {
+  const [holdingsSnap, ordersSnap] = await Promise.all([
+    getDocs(collection(db, LIVE_COLLECTIONS.portfolioHoldings)),
+    getDocs(collection(db, LIVE_COLLECTIONS.orders)),
+  ]);
+  const entries = new Map<string, number>();
+  const take = (userId: unknown, symbol: unknown, entry: unknown) => {
+    const price = Number(entry ?? 0);
+    const key = `${String(userId ?? '')}|${String(symbol ?? '').trim().toUpperCase()}`;
+    if (price > 0 && userId && symbol) entries.set(key, price);
+  };
+  for (const d of ordersSnap.docs) {
+    const data = d.data();
+    take(data.userId, data.symbol, data.entryUnderlyingPrice);
+  }
+  for (const d of holdingsSnap.docs) {
+    const data = d.data();
+    take(data.userId, data.symbol, data.entryUnderlyingPrice);
+  }
+  return entries;
+}
+
 // Rewrites the strike and the entry price on an open position. P/L reads the
 // strike on the holding, so that document is the one that has to change.
 // The filled order and the trade ledger are updated to the same numbers so
