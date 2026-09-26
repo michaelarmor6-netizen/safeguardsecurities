@@ -318,6 +318,7 @@ export const fillOrder = onCall(async (request) => {
       clientStatus: data.clientStatus ?? order.clientStatus ?? 'active',
       optionType: data.optionType ?? order.optionType ?? null,
       strikePrice: data.strikePrice ?? order.strikePrice ?? null,
+      entryUnderlyingPrice: data.entryUnderlyingPrice ?? order.entryUnderlyingPrice ?? null,
       expiryDate: data.expiryDate ?? order.expiryDate ?? null,
       contractSize: contractSize,
       deliveryType: data.deliveryType ?? order.deliveryType ?? null,

@@ -27,6 +27,8 @@ export interface InvestorOrder {
   strikePrice?: number;
   expiryDate?: string;
   contractSize?: number;
+  /** Underlying price the desk recorded on the day the contract was entered. */
+  entryUnderlyingPrice?: number;
   deliveryType?: 'cash_settled' | 'physical';
   fees?: number;
   commission?: number;
@@ -61,6 +63,7 @@ function mapOrder(id: string, data: DocumentData): InvestorOrder {
     strikePrice: data.strikePrice != null ? Number(data.strikePrice) : undefined,
     expiryDate: data.expiryDate ?? undefined,
     contractSize: data.contractSize != null ? Number(data.contractSize) : undefined,
+    entryUnderlyingPrice: data.entryUnderlyingPrice != null ? Number(data.entryUnderlyingPrice) : undefined,
     deliveryType: data.deliveryType ?? undefined,
     fees: data.fees != null ? Number(data.fees) : undefined,
     commission: data.commission != null ? Number(data.commission) : undefined,

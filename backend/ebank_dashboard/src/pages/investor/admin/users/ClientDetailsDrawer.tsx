@@ -7,7 +7,7 @@ import { backfillDepositLedger, getFundingRequestsForUser, requestReference, typ
 import { getKycSubmissionsForUser, type KycSubmission } from '../../../../services/investor/kycService';
 import { getUserPortfolio, getPortfolioStatsForUser, PORTFOLIO_MARK_REFRESH_MS, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
 import { getPortfolioHistory, type PortfolioSnapshot } from '../../../../services/investor/portfolioHistoryService';
-import { getTradesForUser, type Trade } from '../../../../services/investor/tradesService';
+import { getTradesForUser, tradeCreditDebit, type Trade } from '../../../../services/investor/tradesService';
 import { correctPositionTerms } from '../../../../services/investor/tradingService';
 import { logAction } from '../../../../services/investor/auditService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
@@ -599,9 +599,15 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                         <th className="text-left py-1.5 pr-3">Ref</th>
                         <th className="text-left py-1.5 pr-3">Side</th>
                         <th className="text-left py-1.5 pr-3">Symbol</th>
+                        <th className="text-left py-1.5 pr-3">Call/Put</th>
+                        <th className="text-right py-1.5 pr-3">Strike</th>
+                        <th className="text-right py-1.5 pr-3">Entry</th>
                         <th className="text-right py-1.5 pr-3">Qty</th>
                         <th className="text-right py-1.5 pr-3">Price</th>
-                        <th className="text-right py-1.5">Gross</th>
+                        <th className="text-right py-1.5 pr-3">Trade value</th>
+                        <th className="text-right py-1.5 pr-3">Fee</th>
+                        <th className="text-right py-1.5 pr-3">Commission</th>
+                        <th className="text-right py-1.5">Credit/Debit</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -613,9 +619,15 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                           <td className="py-1.5 pr-3 font-mono">{t.tradeRef || t.id.slice(0, 8)}</td>
                           <td className="py-1.5 pr-3 uppercase">{t.side}</td>
                           <td className="py-1.5 pr-3">{t.symbol}</td>
+                          <td className="py-1.5 pr-3 uppercase">{t.optionType ?? '—'}</td>
+                          <td className="py-1.5 pr-3 text-right">{t.strikePrice != null ? fmtMoney(t.strikePrice) : '—'}</td>
+                          <td className="py-1.5 pr-3 text-right">{t.entryUnderlyingPrice != null ? fmtMoney(t.entryUnderlyingPrice) : '—'}</td>
                           <td className="py-1.5 pr-3 text-right">{t.quantity}</td>
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(t.price)}</td>
-                          <td className="py-1.5 text-right">{fmtMoney(t.grossAmount)}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(t.grossAmount)}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(t.fees)}</td>
+                          <td className="py-1.5 pr-3 text-right">{fmtMoney(t.commission)}</td>
+                          <td className="py-1.5 text-right" style={{ color: tradeCreditDebit(t) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>{fmtMoney(tradeCreditDebit(t))}</td>
                         </tr>
                       ))}
                     </tbody>

@@ -35,6 +35,15 @@ function FillRow({ order, onDone }: { order: InvestorOrder; onDone: () => void }
         quantity: qtyNum,
         price: priceNum,
         clientStatus: 'active',
+        // The ticket already holds these. Passing them keeps the fill on the
+        // same call/put, strike, entry, expiry, fee, and commission the desk entered.
+        ...(order.optionType ? { optionType: order.optionType } : {}),
+        ...(order.strikePrice != null ? { strikePrice: order.strikePrice } : {}),
+        ...(order.entryUnderlyingPrice != null ? { entryUnderlyingPrice: order.entryUnderlyingPrice } : {}),
+        ...(order.expiryDate ? { expiryDate: order.expiryDate } : {}),
+        ...(order.contractSize != null ? { contractSize: order.contractSize } : {}),
+        ...(order.fees != null ? { fees: order.fees } : {}),
+        ...(order.commission != null ? { commission: order.commission } : {}),
       });
       if (adminUser) {
         logAction(adminUser.uid, adminProfile?.email ?? '', 'Order filled', `${order.userEmail ?? order.userId}: ${order.symbol} ${result.tradeRef}`);

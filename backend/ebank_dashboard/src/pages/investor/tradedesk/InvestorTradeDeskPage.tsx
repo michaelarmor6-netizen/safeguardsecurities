@@ -24,6 +24,7 @@ import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import { canSelfTrade } from '../../../services/investor/profileService';
 import { termsForSet } from '../../../lib/assetTerminology';
 import FundingRequiredNotice from '../../../components/investor/FundingRequiredNotice';
+import TradingRecord from '../../../components/investor/TradingRecord';
 import ThemeToggle from '../../../components/ui/ThemeToggle';
 import {
   getPortfolioStatsForUser,
@@ -705,40 +706,7 @@ export default function InvestorTradeDeskPage() {
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <h2 className="font-semibold" style={{ color: 'var(--sg-text)', fontFamily: 'var(--sg-font-display)' }}>History</h2>
-              <div className="sg-panel overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="sg-text-muted">
-                    <tr>
-                      <th className="text-left p-3">Date</th>
-                      <th className="text-left p-3">Trade Ref</th>
-                      <th className="text-left p-3">Symbol</th>
-                      <th className="text-left p-3">Side</th>
-                      <th className="text-right p-3">Qty</th>
-                      <th className="text-right p-3">Price</th>
-                      <th className="text-right p-3">Fees + Comm.</th>
-                      <th className="text-left p-3">Remarks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {trades.map((t) => (
-                      <tr key={t.id} className="border-t sg-row-border">
-                        <td className="p-3 sg-text-muted">{t.executedAt ? t.executedAt.toLocaleDateString() : '—'}</td>
-                        <td className="p-3 sg-text-faint font-mono text-xs">{t.tradeRef}</td>
-                        <td className="p-3 font-semibold sg-text-main">{t.symbol}</td>
-                        <td className="p-3 uppercase" style={{ color: t.side === 'buy' ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>{t.side}</td>
-                        <td className="p-3 text-right sg-text-main">{t.quantity}</td>
-                        <td className="p-3 text-right sg-text-main">{fmt(t.price)}</td>
-                        <td className="p-3 text-right sg-text-muted">{fmt(t.fees + t.commission)}</td>
-                        <td className="p-3 sg-text-faint text-xs">{t.remarks}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {trades.length === 0 && <p className="p-8 text-center sg-text-muted">No trade history yet.</p>}
-              </div>
-            </div>
+            <TradingRecord trades={trades} refreshLabel="Opens with this desk session" />
           )}
         </main>
 

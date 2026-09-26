@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Download, Edit2, Search } from 'lucide-react';
-import { getAllTrades, type Trade } from '../../../../services/investor/tradesService';
+import { getAllTrades, tradeCreditDebit, type Trade } from '../../../../services/investor/tradesService';
 import { correctPositionTerms, loadPositionEntries } from '../../../../services/investor/tradingService';
 import { useInvestorAuth } from '../../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../../services/investor/auditService';
@@ -9,12 +9,8 @@ import { logAction } from '../../../../services/investor/auditService';
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n);
 
-function creditDebit(t: Trade): number {
-  return t.side === 'buy' ? -(t.grossAmount + t.fees + t.commission) : t.grossAmount - t.fees - t.commission;
-}
-
 function downloadCsv(rows: Trade[]) {
-  const headers = ['Trade Ref', 'Investor', 'Date', 'Symbol', 'Side', 'Qty', 'Call/Put', 'Strike', 'Expiry', 'Price', 'Trade Value', 'Fees', 'Commission', 'Credit/Debit', 'Remarks'];
+  const headers = ['Trade Ref', 'Investor', 'Date', 'Symbol', 'Side', 'Qty', 'Call/Put', 'Strike', 'Entry', 'Expiry', 'Price', 'Trade Value', 'Fee', 'Commission', 'Credit/Debit', 'Status', 'Remarks'];
   const lines = rows.map((t) =>
     [
       t.tradeRef,
@@ -25,12 +21,14 @@ function downloadCsv(rows: Trade[]) {
       t.quantity,
       t.optionType ?? '',
       t.strikePrice ?? '',
+      t.entryUnderlyingPrice ?? '',
       t.expiryDate ?? '',
       t.price,
       t.grossAmount,
       t.fees,
       t.commission,
-      creditDebit(t),
+      tradeCreditDebit(t),
+      t.clientStatus ?? '',
       t.remarks,
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
@@ -193,9 +191,12 @@ export default function AdminExecutedTrades() {
               <th className="text-right p-3">Qty</th>
               <th className="text-left p-3">Call/Put</th>
               <th className="text-right p-3">Strike</th>
+              <th className="text-right p-3">Entry</th>
               <th className="text-left p-3">Expiry</th>
               <th className="text-right p-3">Price</th>
               <th className="text-right p-3">Trade Value</th>
+              <th className="text-right p-3">Fee</th>
+              <th className="text-right p-3">Commission</th>
               <th className="text-right p-3">Credit/Debit</th>
               <th className="text-left p-3">Remarks</th>
               <th className="text-left p-3">Actions</th>
@@ -212,17 +213,20 @@ export default function AdminExecutedTrades() {
                 <td className="p-3 text-right sg-text-main">{t.quantity}</td>
                 <td className="p-3 uppercase sg-text-faint text-xs">{t.optionType ?? '—'}</td>
                 <td className="p-3 text-right sg-text-faint text-xs">{t.strikePrice != null ? fmt(t.strikePrice) : '—'}</td>
+                <td className="p-3 text-right sg-text-faint text-xs">{t.entryUnderlyingPrice != null ? fmt(t.entryUnderlyingPrice) : '—'}</td>
                 <td className="p-3 sg-text-faint text-xs">{t.expiryDate ?? '—'}</td>
                 <td className="p-3 text-right sg-text-main">{fmt(t.price)}</td>
                 <td className="p-3 text-right sg-text-main">{fmt(t.grossAmount)}</td>
-                <td className="p-3 text-right" style={{ color: creditDebit(t) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>
-                  {fmt(creditDebit(t))}
+                <td className="p-3 text-right sg-text-muted">{fmt(t.fees)}</td>
+                <td className="p-3 text-right sg-text-muted">{fmt(t.commission)}</td>
+                <td className="p-3 text-right" style={{ color: tradeCreditDebit(t) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>
+                  {fmt(tradeCreditDebit(t))}
                 </td>
                 <td className="p-3 sg-text-faint text-xs">{t.remarks}</td>
                 <td className="p-3">
                   <CorrectionRow
                     trade={t}
-                    entryPrice={entries.get(`${t.userId}|${t.symbol.trim().toUpperCase()}`)}
+                    entryPrice={t.entryUnderlyingPrice ?? entries.get(`${t.userId}|${t.symbol.trim().toUpperCase()}`)}
                     onDone={load}
                   />
                 </td>
