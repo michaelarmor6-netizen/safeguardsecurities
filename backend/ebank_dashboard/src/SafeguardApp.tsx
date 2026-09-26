@@ -86,6 +86,9 @@ function SafeguardRoutes() {
       <Route path="/login" element={<InvestorLoginPage />} />
       <Route path="/signup" element={<InvestorSignupPage />} />
       <Route path="/admin-login" element={<InvestorAdminLoginPage />} />
+      <Route path="/client-login" element={<Navigate to="/login" replace />} />
+      <Route path="/signin" element={<Navigate to="/login" replace />} />
+      <Route path="/admin-access" element={<Navigate to="/admin-login" replace />} />
       <Route path="/activation" element={user ? <InvestorActivationPage /> : <Navigate to="/login" replace />} />
       <Route path="/onboarding" element={user ? <InvestorOnboardingPage /> : <Navigate to="/login" replace />} />
       <Route path="/trade-desk" element={<InvestorTradeDeskPage />} />

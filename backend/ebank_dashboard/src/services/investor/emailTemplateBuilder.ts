@@ -35,7 +35,7 @@ export interface BrandedEmailInput {
 
 const COMPANY = 'Safeguard Securities, Inc.';
 const SITE = 'https://safeguardsecurities.us';
-const PORTAL = 'https://app.safeguardsecurities.us/client-login';
+const PORTAL = 'https://app.safeguardsecurities.us/login';
 const ADDRESS = '6060 Parkland Boulevard, Suite 200, Mayfield Heights, OH 44124';
 const PHONE_DISPLAY = '+1 216 2507891';
 const PHONE_TEL = '+12162507891';

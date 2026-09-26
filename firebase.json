@@ -46,22 +46,22 @@
       "redirects": [
         {
           "source": "/login",
-          "destination": "https://app.safeguardsecurities.us/client-login",
+          "destination": "https://app.safeguardsecurities.us/login",
           "type": 301
         },
         {
           "source": "/login.html",
-          "destination": "https://app.safeguardsecurities.us/client-login",
+          "destination": "https://app.safeguardsecurities.us/login",
           "type": 301
         },
         {
           "source": "/signin",
-          "destination": "https://app.safeguardsecurities.us/client-login",
+          "destination": "https://app.safeguardsecurities.us/login",
           "type": 301
         },
         {
           "source": "/register",
-          "destination": "https://app.safeguardsecurities.us/client-login",
+          "destination": "https://app.safeguardsecurities.us/login",
           "type": 301
         },
         {
@@ -96,12 +96,12 @@
         },
         {
           "source": "/admin/login",
-          "destination": "https://app.safeguardsecurities.us/admin-access",
+          "destination": "https://app.safeguardsecurities.us/admin-login",
           "type": 302
         },
         {
           "source": "/admin",
-          "destination": "https://app.safeguardsecurities.us/admin-access",
+          "destination": "https://app.safeguardsecurities.us/admin-login",
           "type": 302
         },
         {
@@ -111,7 +111,7 @@
         },
         {
           "source": "/admin-login.html",
-          "destination": "https://app.safeguardsecurities.us/admin-access",
+          "destination": "https://app.safeguardsecurities.us/admin-login",
           "type": 302
         }
       ],
