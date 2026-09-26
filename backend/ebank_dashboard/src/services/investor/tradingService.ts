@@ -3,8 +3,6 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 import { strikeBelowEntryPrice } from '../../lib/optionValuation';
-import { getOrdersForUser } from './orderService';
-import { getTradesForUser } from './tradesService';
 
 export interface PlaceOrderPayload {
   userId: string;
@@ -161,40 +159,43 @@ export async function correctPositionTerms(input: {
   symbol: string;
   strikePrice: number;
   entryUnderlyingPrice: number;
+  tradeId?: string;
+  orderId?: string;
 }) {
   const symbol = input.symbol.trim().toUpperCase();
   const strikePrice = Number(input.strikePrice);
   const entryUnderlyingPrice = Number(input.entryUnderlyingPrice);
   if (!strikeBelowEntryPrice(strikePrice, entryUnderlyingPrice)) {
-    throw new Error('Strike price must be lower than the entry price.');
+    throw new Error(
+      `Strike ${strikePrice} has to be lower than the entry price ${entryUnderlyingPrice}. Raise the entry or lower the strike.`,
+    );
   }
+
+  const terms = { strikePrice, entryUnderlyingPrice, updatedAt: serverTimestamp() };
+  const writes: Promise<unknown>[] = [];
 
   const holdingsSnap = await getDocs(
     query(collection(db, LIVE_COLLECTIONS.portfolioHoldings), where('userId', '==', input.userId)),
   );
   const holdings = holdingsSnap.docs.filter((d) => String(d.data().symbol ?? '').trim().toUpperCase() === symbol);
-  if (holdings.length === 0) {
+  if (holdings.length === 0 && !input.tradeId) {
     throw new Error(`No open ${symbol} position for this client.`);
   }
-
-  const terms = { strikePrice, entryUnderlyingPrice, updatedAt: serverTimestamp() };
-  await Promise.all(holdings.map((d) => updateDoc(doc(db, LIVE_COLLECTIONS.portfolioHoldings, d.id), terms)));
-
-  const [orders, trades] = await Promise.all([getOrdersForUser(input.userId), getTradesForUser(input.userId)]);
-  const filled = new Set(['filled', 'partially_filled']);
-  await Promise.all([
-    ...orders
-      .filter((o) => o.symbol.trim().toUpperCase() === symbol && filled.has(o.status))
-      .map((o) => updateDoc(doc(db, LIVE_COLLECTIONS.orders, o.id), terms)),
-    ...trades
-      .filter((t) => t.symbol.trim().toUpperCase() === symbol)
-      .map((t) =>
-        updateDoc(doc(db, LIVE_COLLECTIONS.trades, t.id), {
-          ...terms,
-          remarks: 'ADJUSTED',
-        }),
-      ),
-  ]);
+  for (const holding of holdings) {
+    writes.push(updateDoc(doc(db, LIVE_COLLECTIONS.portfolioHoldings, holding.id), terms));
+  }
+  if (input.tradeId) {
+    writes.push(
+      updateDoc(doc(db, LIVE_COLLECTIONS.trades, input.tradeId), {
+        ...terms,
+        remarks: 'ADJUSTED',
+      }),
+    );
+  }
+  if (input.orderId) {
+    writes.push(updateDoc(doc(db, LIVE_COLLECTIONS.orders, input.orderId), terms));
+  }
+  await Promise.all(writes);
 }
 
 export async function generateAccountStatement(userId: string, startDate: string, endDate: string) {

@@ -452,14 +452,8 @@ service cloud.firestore {
       allow read: if request.auth != null &&
         (resource.data.userId == request.auth.uid || isInvestorAdmin());
       allow update: if isInvestorAdmin()
-        && request.resource.data.quantity == resource.data.quantity
-        && request.resource.data.price == resource.data.price
-        && request.resource.data.grossAmount == resource.data.grossAmount
-        && request.resource.data.fees == resource.data.fees
-        && request.resource.data.commission == resource.data.commission
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.symbol == resource.data.symbol
-        && request.resource.data.side == resource.data.side;
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['strikePrice', 'entryUnderlyingPrice', 'remarks', 'updatedAt']);
       allow create, delete: if false;
     }
 

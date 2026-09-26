@@ -85,6 +85,8 @@ function CorrectionRow({ trade, entryPrice, onDone }: { trade: Trade; entryPrice
         symbol: trade.symbol,
         strikePrice: strikeNum,
         entryUnderlyingPrice: entryNum,
+        tradeId: trade.id,
+        orderId: trade.orderId,
       });
       if (user) logAction(user.uid, profile?.email ?? '', 'Position terms corrected', `${trade.symbol} strike ${strikeNum} entry ${entryNum}`);
       toast.success('Strike and entry price updated');
