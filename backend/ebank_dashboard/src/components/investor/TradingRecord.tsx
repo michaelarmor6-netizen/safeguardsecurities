@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Download, Printer, Radio } from 'lucide-react';
-import { tradeCreditDebit, type Trade } from '../../services/investor/tradesService';
+import type { Trade } from '../../services/investor/tradesService';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n);
@@ -28,7 +28,7 @@ function statusOf(t: Trade): { label: string; color: string } {
 }
 
 function downloadCsv(rows: Trade[], side: 'buy' | 'sell') {
-  const headers = ['Trade date', 'Time', 'Trade ref', 'Symbol', 'Call/Put', 'Strike', 'Entry', 'Expiry', 'Qty', 'Price', 'Trade value', 'Fee', 'Commission', 'Credit/Debit', 'Status'];
+  const headers = ['Trade date', 'Time', 'Trade ref', 'Symbol', 'Call/Put', 'Strike', 'Expiry', 'Qty', 'Price', 'Trade value', 'Fee', 'Status'];
   const lines = rows.map((t) =>
     [
       t.executedAt ? fmtDate(t.executedAt) : '',
@@ -37,14 +37,11 @@ function downloadCsv(rows: Trade[], side: 'buy' | 'sell') {
       t.symbol,
       t.optionType ?? '',
       t.strikePrice ?? '',
-      t.entryUnderlyingPrice ?? '',
       t.expiryDate ?? '',
       t.quantity,
       t.price,
       t.grossAmount,
       t.fees,
-      t.commission,
-      tradeCreditDebit(t),
       statusOf(t).label,
     ]
       .map((v) => `"${String(v).replace(/"/g, '""')}"`)
@@ -64,7 +61,7 @@ function downloadCsv(rows: Trade[], side: 'buy' | 'sell') {
 export default function TradingRecord({ trades, refreshLabel = 'Live · refreshes every 12s' }: { trades: Trade[]; refreshLabel?: string }) {
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const rows = useMemo(() => trades.filter((t) => t.side === side), [trades, side]);
-  const settlementTotal = rows.reduce((sum, t) => sum + tradeCreditDebit(t), 0);
+  const tradeValue = rows.reduce((sum, t) => sum + t.grossAmount, 0);
   const latest = rows.find((t) => t.executedAt)?.executedAt;
   const instruments = new Set(rows.map((t) => t.symbol.trim().toUpperCase()).filter(Boolean)).size;
 
@@ -126,7 +123,7 @@ export default function TradingRecord({ trades, refreshLabel = 'Live · refreshe
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-5">
           {[
             ['Confirmed fills', String(rows.length), side === 'buy' ? 'Buy-side executions' : 'Sell-side executions'],
-            ['Credit / debit', fmt(settlementTotal), 'Same net the desk posts to the account'],
+            ['Trade value', fmt(tradeValue), 'Sum of confirmed fills'],
             ['Latest fill', latest ? fmtLatest(latest) : '—', 'Most recent execution'],
             ['Instruments', String(instruments), 'Unique symbols traded'],
           ].map(([label, value, hint]) => (
@@ -143,8 +140,8 @@ export default function TradingRecord({ trades, refreshLabel = 'Live · refreshe
         <table className="min-w-full text-sm sg-table-stack">
           <thead>
             <tr className="text-[10px] uppercase tracking-[0.12em]" style={{ color: 'var(--sg-muted-2)' }}>
-              {['Trade date', 'Time', 'Trade ref', 'Symbol', 'Call/Put', 'Strike', 'Entry', 'Expiry', 'Qty', 'Price', 'Trade value', 'Fee', 'Commission', 'Credit/Debit', 'Status'].map((h) => (
-                <th key={h} className={`p-3 ${['Strike', 'Entry', 'Qty', 'Price', 'Trade value', 'Fee', 'Commission', 'Credit/Debit'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
+              {['Trade date', 'Time', 'Trade ref', 'Symbol', 'Call/Put', 'Strike', 'Expiry', 'Qty', 'Price', 'Trade value', 'Fee', 'Status'].map((h) => (
+                <th key={h} className={`p-3 ${['Strike', 'Qty', 'Price', 'Trade value', 'Fee'].includes(h) ? 'text-right' : 'text-left'}`}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -159,14 +156,11 @@ export default function TradingRecord({ trades, refreshLabel = 'Live · refreshe
                   <td className="p-3 font-semibold sg-text-main" data-label="Symbol">{t.symbol}</td>
                   <td className="p-3 uppercase text-xs sg-text-muted" data-label="Call/Put">{t.optionType ?? '—'}</td>
                   <td className="p-3 text-right sg-text-main" data-label="Strike">{t.strikePrice != null ? fmt(t.strikePrice) : '—'}</td>
-                  <td className="p-3 text-right sg-text-main" data-label="Entry">{t.entryUnderlyingPrice != null ? fmt(t.entryUnderlyingPrice) : '—'}</td>
                   <td className="p-3 whitespace-nowrap sg-text-muted" data-label="Expiry">{fmtExpiry(t.expiryDate)}</td>
                   <td className="p-3 text-right sg-text-main" data-label="Qty">{t.quantity.toLocaleString()}</td>
                   <td className="p-3 text-right sg-text-main" data-label="Price">{fmt(t.price)}</td>
                   <td className="p-3 text-right sg-text-main" data-label="Trade value">{fmt(t.grossAmount)}</td>
                   <td className="p-3 text-right sg-text-muted" data-label="Fee">{fmt(t.fees)}</td>
-                  <td className="p-3 text-right sg-text-muted" data-label="Commission">{fmt(t.commission)}</td>
-                  <td className="p-3 text-right font-medium" data-label="Credit/Debit" style={{ color: tradeCreditDebit(t) >= 0 ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>{fmt(tradeCreditDebit(t))}</td>
                   <td className="p-3 text-xs font-semibold uppercase" data-label="Status" style={{ color: status.color }}>{status.label}</td>
                 </tr>
               );
@@ -182,7 +176,7 @@ export default function TradingRecord({ trades, refreshLabel = 'Live · refreshe
       </div>
 
       <p className="text-xs rounded-xl px-4 py-3" style={{ color: 'var(--sg-muted)', border: '1px solid var(--sg-border)', background: 'var(--sg-bg-elevated)' }}>
-        Price is the contract premium. Entry is the underlying on the day the desk opened the contract. Credit/debit is trade value plus fee plus commission on a buy, and trade value minus both on a sell.
+        Price is the contract premium the desk confirmed on the fill.
       </p>
     </div>
   );
