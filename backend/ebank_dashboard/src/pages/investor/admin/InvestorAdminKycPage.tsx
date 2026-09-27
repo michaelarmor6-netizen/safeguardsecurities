@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { getAllKycDocuments, getAllKycSubmissions, reviewIdentityDocument, reviewKyc, type KycDocument, type KycSubmission } from '../../../services/investor/kycService';
 import { kycDocLabel } from '../../../lib/kycDocuments';
+import { downloadSubmittedDocument, verifySubmittedDocument, type DocumentCheck } from '../../../lib/documentAuthenticity';
 import { useInvestorAuth } from '../../../contexts/InvestorAuthContext';
 import { logAction } from '../../../services/investor/auditService';
 
@@ -20,6 +21,7 @@ export default function InvestorAdminKycPage() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [report, setReport] = useState<{ id: string; checks: DocumentCheck[]; ok: boolean } | null>(null);
 
   const load = () => {
     Promise.all([getAllKycDocuments(), getAllKycSubmissions()])
@@ -32,7 +34,7 @@ export default function InvestorAdminKycPage() {
 
   useEffect(load, []);
 
-  const review = async (row: KycDocument, decision: 'approved' | 'rejected') => {
+  const review = async (row: KycDocument, decision: 'approved' | 'rejected', summary?: string) => {
     if (decision === 'approved' && !window.confirm(`Approve this ${kycDocLabel(row.docType)} for ${row.clientName || row.userEmail || 'this client'}?`)) {
       return;
     }
@@ -42,11 +44,12 @@ export default function InvestorAdminKycPage() {
     }
     setBusyId(row.id);
     try {
-      await reviewIdentityDocument(row.id, decision, decision === 'rejected' ? notes : undefined);
+      await reviewIdentityDocument(row.id, decision, decision === 'rejected' ? notes : summary);
       if (user) logAction(user.uid, adminProfile?.email ?? '', `KYC document ${decision}`, `${row.clientName} ${row.docType}`);
       toast.success(decision === 'approved' ? 'Document approved' : 'Document rejected');
       setRejectingId(null);
       setNotes('');
+      setReport(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Review failed');
@@ -55,16 +58,72 @@ export default function InvestorAdminKycPage() {
     }
   };
 
-  const reviewLegacy = async (row: KycSubmission, status: 'verified' | 'rejected') => {
+  const reviewLegacy = async (row: KycSubmission, status: 'verified' | 'rejected', summary?: string) => {
     try {
-      await reviewKyc(row.id, status);
+      await reviewKyc(row.id, status, summary);
       if (user) logAction(user.uid, adminProfile?.email ?? '', `KYC ${status}`, row.userEmail ?? row.userId);
       toast.success(status === 'verified' ? 'Verified' : 'Rejected');
+      setReport(null);
       load();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to review submission');
     }
   };
+
+  const runCheck = async (id: string, url?: string) => {
+    if (!url) {
+      toast.error('There is no file to check.');
+      return;
+    }
+    setBusyId(id);
+    setReport(null);
+    try {
+      const result = await verifySubmittedDocument(url);
+      setReport({ id, checks: result.checks, ok: result.ok });
+      if (!result.ok) toast.error('Document check failed. Review the items below before verifying.');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Document check failed');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const download = async (url: string, filename: string) => {
+    try {
+      await downloadSubmittedDocument(url, filename);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Download failed');
+    }
+  };
+
+  const fileLinks = (url: string | undefined, filename: string) =>
+    url ? (
+      <>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="sg-btn-ghost text-xs">View</a>
+        <button type="button" className="sg-btn-ghost text-xs" onClick={() => download(url, filename)}>Download</button>
+      </>
+    ) : null;
+
+  const checkPanel = (id: string, onConfirm: (summary: string) => void) =>
+    report?.id === id ? (
+      <div className="mt-3 rounded-lg p-3 space-y-1" style={{ border: '1px solid var(--sg-border)', background: 'var(--sg-bg-elevated)' }}>
+        <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-muted)' }}>Document check</p>
+        {report.checks.map((check) => (
+          <p key={check.name} className="text-xs" style={{ color: check.pass ? 'var(--sg-teal)' : 'var(--sg-danger)' }}>
+            {check.pass ? 'Pass' : 'Fail'} · {check.name}. {check.detail}
+          </p>
+        ))}
+        {report.ok && (
+          <button
+            type="button"
+            className="sg-action-btn text-xs mt-2"
+            onClick={() => onConfirm(report.checks.map((c) => `${c.name}: ${c.detail}`).join(' '))}
+          >
+            Confirm verification
+          </button>
+        )}
+      </div>
+    ) : null;
 
   const pendingCount = documents.filter((d) => d.status === 'pending').length;
   const visible = documents.filter((d) => filter === 'all' || d.status === 'pending');
@@ -105,17 +164,15 @@ export default function InvestorAdminKycPage() {
                 {row.status}
               </span>
             </div>
-            {row.reviewNote && <p className="text-sm mt-2" style={{ color: 'var(--sg-danger)' }}>{row.reviewNote}</p>}
+            {row.reviewNote && (
+              <p className="text-sm mt-2" style={{ color: row.status === 'rejected' ? 'var(--sg-danger)' : 'var(--sg-muted)' }}>{row.reviewNote}</p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {!row.fileRemoved && row.fileUrl && (
-                <a href={row.fileUrl} target="_blank" rel="noopener noreferrer" className="sg-btn-ghost text-xs">
-                  View
-                </a>
-              )}
+              {!row.fileRemoved && fileLinks(row.fileUrl, row.fileName || `${row.docType}.pdf`)}
               {row.status === 'pending' && (
                 <>
-                  <button type="button" className="sg-action-btn text-xs" disabled={busyId === row.id} onClick={() => review(row, 'approved')}>
-                    Approve
+                  <button type="button" className="sg-action-btn text-xs" disabled={busyId === row.id} onClick={() => runCheck(row.id, row.fileUrl)}>
+                    {busyId === row.id ? 'Checking…' : 'Verify'}
                   </button>
                   <button type="button" className="sg-danger-btn text-xs" onClick={() => setRejectingId(row.id)}>
                     Reject
@@ -123,6 +180,7 @@ export default function InvestorAdminKycPage() {
                 </>
               )}
             </div>
+            {checkPanel(row.id, (summary) => { void review(row, 'approved', summary); })}
             {rejectingId === row.id && (
               <div className="mt-3 flex flex-wrap items-end gap-2">
                 <label className="text-xs flex-1 min-w-[200px]" style={{ color: 'var(--sg-muted)' }}>
@@ -152,17 +210,19 @@ export default function InvestorAdminKycPage() {
                 <span className="text-xs font-semibold uppercase" style={{ color: statusColor[s.status] }}>{s.status}</span>
               </div>
               <p className="text-sm mt-2 sg-text-muted">{s.idType} · {s.idNumber}</p>
-              {s.idDocumentUrl && (
-                <a href={s.idDocumentUrl} target="_blank" rel="noopener noreferrer" className="text-sm mt-2 inline-block underline" style={{ color: 'var(--sg-indigo)' }}>
-                  View submitted document
-                </a>
-              )}
-              {s.status === 'pending' && (
-                <div className="mt-3 flex gap-2">
-                  <button type="button" className="sg-action-btn text-xs" onClick={() => reviewLegacy(s, 'verified')}>Verify</button>
-                  <button type="button" className="sg-danger-btn text-xs" onClick={() => reviewLegacy(s, 'rejected')}>Reject</button>
-                </div>
-              )}
+              {s.reviewNote && <p className="text-sm mt-1" style={{ color: s.status === 'rejected' ? 'var(--sg-danger)' : 'var(--sg-muted)' }}>{s.reviewNote}</p>}
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {fileLinks(s.idDocumentUrl, `${s.fullName || 'client'}-${s.idType || 'document'}`)}
+                {s.status === 'pending' && (
+                  <>
+                    <button type="button" className="sg-action-btn text-xs" disabled={busyId === s.id} onClick={() => runCheck(s.id, s.idDocumentUrl)}>
+                      {busyId === s.id ? 'Checking…' : 'Verify'}
+                    </button>
+                    <button type="button" className="sg-danger-btn text-xs" onClick={() => reviewLegacy(s, 'rejected')}>Reject</button>
+                  </>
+                )}
+              </div>
+              {checkPanel(s.id, (summary) => { void reviewLegacy(s, 'verified', summary); })}
             </div>
           ))}
         </div>

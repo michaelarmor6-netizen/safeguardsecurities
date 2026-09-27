@@ -25,10 +25,62 @@ import {
   Send,
   Mail,
   FileSpreadsheet,
+  ChevronDown,
 } from 'lucide-react';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import ThemeToggle from '../ui/ThemeToggle';
 import FinanceNotificationBell from '../investor/FinanceNotificationBell';
+
+const crmItems = [
+  { to: '/admin/crm-leads', label: 'Leads', icon: Contact },
+  { to: '/admin/crm-imports', label: 'Imports', icon: FileUp },
+  { to: '/admin/crm-campaigns', label: 'Campaigns', icon: Send },
+  { to: '/admin/crm-instruments', label: 'Instruments', icon: Target },
+  { to: '/admin/email-templates', label: 'Email Builder', icon: Mail },
+];
+
+function CrmNav() {
+  const location = useLocation();
+  const onCrm = crmItems.some((item) => location.pathname.startsWith(item.to));
+  const [open, setOpen] = useState(onCrm);
+
+  useEffect(() => {
+    if (onCrm) setOpen(true);
+  }, [onCrm]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`w-full flex items-center gap-3 rounded-[10px] px-3 py-2.5 lg:py-2 text-sm transition ${onCrm ? 'sg-nav-active' : ''}`}
+        style={onCrm ? undefined : { color: 'var(--sg-muted)' }}
+        aria-expanded={open}
+      >
+        <Contact className="h-4 w-4 shrink-0" />
+        <span className="flex-1 text-left">CRM</span>
+        <ChevronDown className={`h-3.5 w-3.5 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="mt-1 ml-4 pl-2 space-y-0.5 border-l" style={{ borderColor: 'var(--sg-border)' }}>
+          {crmItems.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                `flex items-center gap-2.5 rounded-[8px] px-3 py-2 text-sm transition ${isActive ? 'sg-nav-active' : ''}`
+              }
+              style={({ isActive }) => (isActive ? undefined : { color: 'var(--sg-muted)' })}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const nav = [
   { to: '/admin', label: 'Overview', icon: LayoutDashboard, end: true },
@@ -46,11 +98,6 @@ const nav = [
   { to: '/admin/kyc', label: 'KYC Review', icon: ShieldCheck },
   { to: '/admin/strategies', label: 'Strategies', icon: Target },
   { to: '/admin/risk', label: 'Risk Summary', icon: AlertTriangle },
-  { to: '/admin/crm-leads', label: 'CRM Leads', icon: Contact },
-  { to: '/admin/crm-imports', label: 'CRM Imports', icon: FileUp },
-  { to: '/admin/crm-campaigns', label: 'CRM Campaigns', icon: Send },
-  { to: '/admin/crm-instruments', label: 'CRM Instruments', icon: Target },
-  { to: '/admin/email-templates', label: 'Email Builder', icon: Mail },
   { to: '/admin/audit', label: 'Audit Log', icon: ScrollText },
   { to: '/admin/settings', label: 'Settings', icon: Settings },
 ];
@@ -145,8 +192,9 @@ export default function InvestorAdminLayout() {
         </div>
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {nav.map(({ to, label, icon: Icon, end }) => (
+            <span key={to} className="contents">
+            {to === '/admin/audit' && <CrmNav />}
             <NavLink
-              key={to}
               to={to}
               end={end}
               className={({ isActive }) =>
@@ -159,6 +207,7 @@ export default function InvestorAdminLayout() {
               <Icon className="h-4 w-4 shrink-0" />
               {label}
             </NavLink>
+            </span>
           ))}
         </nav>
         <div className="p-4 border-t space-y-3" style={{ borderColor: 'var(--sg-border)' }}>

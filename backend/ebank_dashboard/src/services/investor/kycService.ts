@@ -195,7 +195,7 @@ export async function reviewIdentityDocument(
   }
   await updateDoc(doc(db, LIVE_COLLECTIONS.kycDocuments, id), {
     status,
-    reviewNote: status === 'rejected' ? reviewNote?.trim() : null,
+    reviewNote: reviewNote?.trim() || null,
     reviewedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
