@@ -5,7 +5,7 @@ import type { InvestorProfile } from '../../../../services/investor/profileServi
 import { getUserWallet } from '../../../../services/investor/walletService';
 import { backfillDepositLedger, getFundingRequestsForUser, requestReference, type FundingRequest } from '../../../../services/investor/fundingService';
 import { getKycSubmissionsForUser, type KycSubmission } from '../../../../services/investor/kycService';
-import { getUserPortfolio, getPortfolioStatsForUser, PORTFOLIO_MARK_REFRESH_MS, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
+import { getUserPortfolio, getPortfolioStatsForUser, setHoldingManualPnl, PORTFOLIO_MARK_REFRESH_MS, type PortfolioHolding, type PortfolioStats } from '../../../../services/investor/portfolioService';
 import { getPortfolioHistory, type PortfolioSnapshot } from '../../../../services/investor/portfolioHistoryService';
 import { getTradesForUser, tradeCreditDebit, type Trade } from '../../../../services/investor/tradesService';
 import { correctPositionTerms } from '../../../../services/investor/tradingService';
@@ -125,6 +125,47 @@ function HoldingTermsEditor({
   );
 }
 
+function HoldingPnlEditor({ holding, onSaved }: { holding: PortfolioHolding; onSaved: () => void }) {
+  const posted = typeof holding.manualPnl === 'number' ? holding.manualPnl : holding.optionPnl;
+  const [value, setValue] = useState(posted != null ? String(posted) : '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const pnl = Number(value);
+    if (!Number.isFinite(pnl)) {
+      toast.error('Enter the P/L in dollars. Use a minus sign for a loss.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await setHoldingManualPnl(holding.id, pnl);
+      toast.success(`${holding.symbol} P/L saved`);
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save P/L');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-end gap-1">
+      <input
+        type="number"
+        step="any"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="0.00"
+        aria-label={`P/L for ${holding.symbol}`}
+        className="sg-input py-1 px-2 text-xs w-24 text-right"
+      />
+      <button type="button" className="sg-action-btn text-xs px-2 py-1" disabled={saving} onClick={save}>
+        {saving ? 'Saving…' : 'Save'}
+      </button>
+    </div>
+  );
+}
+
 function Field({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="min-w-0">
@@ -225,8 +266,7 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
     return () => { cancelled = true; };
   }, [profile.id, reloadKey, canViewBook]);
 
-  // The hourly mark job updates marketPrices. Re-read P/L while this drawer
-  // stays open so the desk does not have to close and reopen it.
+  // Re-read after the desk posts a P/L, and while the drawer stays open.
   useEffect(() => {
     if (!canViewBook) return;
     const timer = window.setInterval(() => {
@@ -521,6 +561,9 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
               <h3 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--sg-teal)' }}>
                 Current holdings
               </h3>
+              <p className="text-xs" style={{ color: 'var(--sg-muted-2)' }}>
+                P/L is what you save here. Live prices are not applied.
+              </p>
               {loading ? (
                 <p className="text-sm sg-text-muted">Loading…</p>
               ) : holdings.length === 0 ? (
@@ -553,16 +596,8 @@ export default function ClientDetailsDrawer({ profile, onClose }: ClientDetailsD
                           <td className="py-1.5 pr-3 text-right">{fmtMoney(h.price)}</td>
                           <td className="py-1.5 pr-3 text-right">{h.strikePrice != null ? fmtMoney(h.strikePrice) : '—'}</td>
                           <td className="py-1.5 pr-3 text-right">{h.entryUnderlyingPrice != null ? fmtMoney(h.entryUnderlyingPrice) : '—'}</td>
-                          <td
-                            className="py-1.5 pr-3 text-right"
-                            style={{
-                              color:
-                                (typeof h.optionPnl === 'number' ? h.optionPnl : h.value - h.shares * h.averagePrice) >= 0
-                                  ? 'var(--sg-teal)'
-                                  : 'var(--sg-danger)',
-                            }}
-                          >
-                            {fmtMoney(typeof h.optionPnl === 'number' ? h.optionPnl : h.value - h.shares * h.averagePrice)}
+                          <td className="py-1.5 pr-3 text-right">
+                            <HoldingPnlEditor holding={h} onSaved={() => setReloadKey((n) => n + 1)} />
                           </td>
                           <td className="py-1.5 text-right sg-text-main">{fmtMoney(h.value)}</td>
                           <td className="py-1.5 text-right">

@@ -964,6 +964,14 @@ body.sg-sector-focus-3 .elementor-element-5ab463e .elementor-container {
   }
 }
 
+/* Contact cards: phone numbers are links, so they were picking up the theme link color on the blue card. */
+.elementor-page-1793 .elementor-element-dc0a23d .elementor-image-box-description,
+.elementor-page-1793 .elementor-element-dc0a23d .elementor-image-box-description a,
+.elementor-page-1793 .elementor-element-dc0a23d .elementor-image-box-description a:visited,
+.elementor-page-1793 .elementor-element-dc0a23d .elementor-image-box-description a:hover {
+  color: #fff !important;
+}
+
 /* Mobile */
 @media (max-width: 767px) {
   #masthead .elementor-section.elementor-top-section > .elementor-container {

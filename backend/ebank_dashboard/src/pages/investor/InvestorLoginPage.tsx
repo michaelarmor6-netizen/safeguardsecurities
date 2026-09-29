@@ -16,6 +16,8 @@ import { isInvestorAdmin } from '../../lib/investorRoles';
 import { ensureInvestorProfile } from '../../services/investor/profileService';
 import { auth } from '../../config/firebase';
 import ThemeToggle from '../../components/ui/ThemeToggle';
+import { isClerkAuthEnabled } from '../../lib/clerk';
+import { ClerkLoginForm } from '../../components/auth/ClerkLoginForm';
 
 const features = [
   {
@@ -51,6 +53,7 @@ export default function InvestorLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [legacyPassword, setLegacyPassword] = useState(false);
 
   if (loading) {
     return (
@@ -199,6 +202,9 @@ export default function InvestorLoginPage() {
               Sign in to review your dashboard, portfolio, and workspace status.
             </p>
 
+            {isClerkAuthEnabled() && !legacyPassword ? (
+              <ClerkLoginForm onUseExistingPassword={() => setLegacyPassword(true)} />
+            ) : (
             <form onSubmit={submit} className="mt-8 space-y-5">
               <div>
                 <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>
@@ -266,6 +272,17 @@ export default function InvestorLoginPage() {
                 {busy ? 'Please wait...' : 'Sign In'}
               </button>
             </form>
+            )}
+            {isClerkAuthEnabled() && legacyPassword && (
+              <button
+                type="button"
+                className="text-sm mt-4 w-full"
+                style={{ color: 'var(--sg-indigo)' }}
+                onClick={() => setLegacyPassword(false)}
+              >
+                Use Clerk sign-in
+              </button>
+            )}
 
             <p className="text-sm mt-5 text-center" style={{ color: 'var(--sg-muted-2)' }}>
               Don&apos;t have an account?{' '}

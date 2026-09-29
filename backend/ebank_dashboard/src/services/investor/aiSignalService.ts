@@ -24,9 +24,8 @@ export interface AiSignal {
 
 const generateFn = httpsCallable<{ symbol: string }, AiSignal>(functions, 'generateTradingSignal');
 
-export async function generateSignal(symbol: string): Promise<AiSignal> {
-  const res = await generateFn({ symbol });
-  return res.data;
+export async function generateSignal(_symbol: string): Promise<AiSignal> {
+  throw new Error('Live signals are paused.');
 }
 
 function mapSignal(id: string, data: DocumentData): AiSignal {

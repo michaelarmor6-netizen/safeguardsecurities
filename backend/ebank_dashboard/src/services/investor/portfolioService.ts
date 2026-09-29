@@ -1,10 +1,9 @@
-import { collection, doc, getDoc, getDocs, query, where, type DocumentData } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, query, updateDoc, where, type DocumentData } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 import { getAllFundingRequests, getPendingFundingRequests } from './fundingService';
-import { getQuote } from './marketService';
 import { getAllAssets, type AssetClass } from './assetCatalogService';
-import { valueOptionPosition, breakEvenPrice, optionReturnPercent, optionSessionPnl, unrealizedGain, isOptionSide } from '../../lib/optionValuation';
+import { unrealizedGain, isOptionSide } from '../../lib/optionValuation';
 import { getAllOrders, getPendingOrders } from './orderService';
 import { getAllInvestorProfiles, getPendingApplicants } from './profileService';
 import { getAllWallets } from './walletService';
@@ -41,7 +40,11 @@ export interface PortfolioHolding {
   isCapped?: boolean;
   /** Underlying price at which the payoff repays the premium. */
   breakEven?: number;
-  /** True when no live quote exists and price falls back to entry cost. */
+  /** Admin-posted unrealized P/L in dollars. Absent until the desk sets it. */
+  manualPnl?: number;
+  /** Calendar day (YYYY-MM-DD) the desk last posted manualPnl. */
+  manualPnlAsOf?: string;
+  /** True when the desk has not posted a P/L yet, so the position sits at cost. */
   markedAtCost?: boolean;
   /** Trading session (YYYY-MM-DD) of the settlement used to mark the payoff. */
   markAsOf?: string;
@@ -83,7 +86,19 @@ function mapRawHolding(id: string, data: DocumentData): Omit<PortfolioHolding, '
     multiplier: Number(data.multiplier ?? data.contractSize ?? 0) || undefined,
     strikePrice: Number(data.strikePrice ?? 0) || undefined,
     optionType: isOptionSide(data.optionType) ? data.optionType : undefined,
+    manualPnl: typeof data.manualPnl === 'number' && Number.isFinite(data.manualPnl) ? data.manualPnl : undefined,
+    manualPnlAsOf: typeof data.manualPnlAsOf === 'string' ? data.manualPnlAsOf : undefined,
   };
+}
+
+/** Desk-posted unrealized P/L. Replaces the live quote and settlement feeds. */
+export async function setHoldingManualPnl(holdingId: string, pnl: number) {
+  if (!Number.isFinite(pnl)) throw new Error('Enter a P/L amount.');
+  await updateDoc(doc(db, LIVE_COLLECTIONS.portfolioHoldings, holdingId), {
+    manualPnl: pnl,
+    manualPnlAsOf: new Date().toISOString().slice(0, 10),
+    updatedAt: new Date(),
+  });
 }
 
 interface OpeningTerms {
@@ -218,85 +233,30 @@ export async function getUserPortfolio(userId: string): Promise<PortfolioHolding
   const byId = new Map(catalog.map((a) => [a.id, a]));
   const bySymbol = new Map(catalog.map((a) => [a.symbol, a]));
 
-  // One read per distinct underlying. Catalog underlyingPriceSymbol when it
-  // is set; otherwise the holding symbol itself when that symbol is the
-  // contract month (GCF27).
-  const underlyingTickers = rows
-    .map((r) => {
-      const asset = (r.assetId ? byId.get(r.assetId) : undefined) ?? bySymbol.get(r.symbol);
-      return markTickerFor(r.symbol, asset?.underlyingPriceSymbol);
-    })
-    .filter((x): x is string => typeof x === 'string' && x.length > 0);
-  const marks = await fetchUnderlyingMarks(underlyingTickers);
-
-  const needsOpeningTerms = rows.some((r) => !r.strikePrice || !r.optionType);
-  const openingTerms = needsOpeningTerms ? await loadOpeningTerms(userId).catch(() => new Map<string, OpeningTerms>()) : new Map<string, OpeningTerms>();
-
   const enriched: PortfolioHolding[] = [];
 
   for (const row of rows) {
     const asset = (row.assetId ? byId.get(row.assetId) : undefined) ?? bySymbol.get(row.symbol);
-    const quote = await getQuote(row.symbol, row.currentPrice);
-    const opening = openingTerms.get(row.symbol.trim().toUpperCase());
-
-    // The catalog's cached quote may ONLY be used when the holding is that
-    // exact instrument. Root commodities carry a proxy quoteSymbol (Gold/GC
-    // quotes via the GLD ETF), so reaching through to it would mark a COMEX
-    // futures contract at an ETF's share price - a fabricated loss on a
-    // position that has not moved. A contract month (GCF27) is not its root
-    // (GC), and neither is the proxy.
-    const isSameInstrument = asset?.symbol === row.symbol;
-    const catalogPrice = isSameInstrument ? asset?.quote?.price ?? 0 : 0;
-
-    // Raw futures contracts have no quote of their own, so no live price
-    // exists. Mark those at entry cost rather than zero - a position valued
-    // at $0 tells the client their holding is worthless, which is not true.
-    const livePrice = quote.price || row.currentPrice || catalogPrice || 0;
-    const markedAtCost = livePrice <= 0;
-    const spotValue = row.shares * (markedAtCost ? row.averagePrice : livePrice);
-
-    // Limited-risk option payoff. The basis is the broker's strike, compared
-    // with the running underlying price. Call: each $1 up pays $100 per
-    // contract. Put: each $1 down pays $100 per contract. Losses stop at the
-    // premium. The current price is the underlying settlement — never the
-    // premium and never a proxy quote.
-    const underlyingTicker = markTickerFor(row.symbol, asset?.underlyingPriceSymbol);
-    const mark = underlyingTicker ? marks.get(underlyingTicker) : undefined;
-    const strikePrice = row.strikePrice ?? opening?.strike ?? 0;
-    const optionType = row.optionType ?? opening?.optionType;
-    const position = optionType
-      ? {
-          contracts: row.shares,
-          premiumPerContract: row.averagePrice,
-          strikePrice,
-          optionType,
-        }
-      : null;
-    const valuation = position && mark?.price ? valueOptionPosition(position, mark.price) : null;
-    const sessionPnl =
-      position && valuation && mark?.previousPrice ? optionSessionPnl(position, mark.price, mark.previousPrice) : null;
+    const cost = row.shares * row.averagePrice;
+    const hasManual = typeof row.manualPnl === 'number';
+    const pnl = hasManual ? row.manualPnl! : 0;
+    // Until the desk posts a figure, the position stays at cost. A posted
+    // loss cannot take the displayed value below zero.
+    const value = hasManual ? Math.max(0, cost + pnl) : cost;
 
     enriched.push({
       ...row,
       name: asset?.name ?? row.name,
       assetClass: asset?.assetClass,
-      strikePrice: strikePrice || undefined,
-      optionType,
-      // For a valued option the mark is current value per contract, so the
-      // figure on screen moves with the underlying instead of sitting on the
-      // premium that was paid.
-      price: valuation ? valuation.value / row.shares : markedAtCost ? row.averagePrice : livePrice,
-      change: valuation ? valuation.pnl / row.shares : markedAtCost ? 0 : quote.change,
-      changePercent: valuation ? optionReturnPercent(valuation) : markedAtCost ? 0 : quote.changePercent,
-      value: valuation ? valuation.value : spotValue,
+      price: row.shares > 0 ? value / row.shares : row.averagePrice,
+      change: 0,
+      changePercent: hasManual && cost > 0 ? (pnl / cost) * 100 : 0,
+      value,
       allocation: 0,
-      markedAtCost: valuation ? false : markedAtCost,
-      markAsOf: valuation ? mark?.asOf : undefined,
-      dayPnl: sessionPnl ?? (valuation ? undefined : markedAtCost ? 0 : quote.change * row.shares),
-      optionPnl: valuation?.pnl,
-      maxLoss: valuation?.maxLoss,
-      isCapped: valuation?.isCapped,
-      breakEven: position ? breakEvenPrice(position) ?? undefined : undefined,
+      markedAtCost: !hasManual,
+      markAsOf: hasManual ? row.manualPnlAsOf : undefined,
+      dayPnl: 0,
+      optionPnl: hasManual ? pnl : undefined,
     });
   }
 

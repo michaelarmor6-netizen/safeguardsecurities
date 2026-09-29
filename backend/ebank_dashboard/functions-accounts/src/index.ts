@@ -35,9 +35,10 @@ async function emailInUse(email: string): Promise<boolean> {
   return !snap.empty;
 }
 
-// Public pre-signup check (no auth required - the caller doesn't have an
-// account yet). Used by the signup form to flag a taken email before the
-// client ever calls createUserWithEmailAndPassword.
+// Public pre-signup check (no auth required). Signup no longer calls this:
+// Create Account uses Firebase Auth directly so login does not depend on
+// Cloud Run. Kept for an admin or future caller that wants the Firestore
+// orphan-profile check (Auth can free an email while profiles/{uid} remains).
 export const checkEmailAvailable = onCall(async (request) => {
   const email = String((request.data as { email?: string } | undefined)?.email ?? '')
     .trim()

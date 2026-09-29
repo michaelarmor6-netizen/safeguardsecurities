@@ -11,7 +11,7 @@
       phoneTel: "+12162507891",
       additionalPhoneDisplay: "+1 937 982 1491",
       additionalPhoneTel: "+19379821491",
-      email: "info@safeguardsecurities.us",
+      email: "support@safeguardsecurities.us",
       address: "6060 Parkland Boulevard, Suite 200, Mayfield Heights, OH 44124"
     },
 

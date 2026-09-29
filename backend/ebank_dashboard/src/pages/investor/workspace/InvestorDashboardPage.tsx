@@ -159,11 +159,7 @@ export default function InvestorDashboardPage() {
     holdingsCount: 0,
   };
 
-  // A payoff position with no daily settlement yet marks at cost, which
-  // makes gain/performance a mathematically-true-but-misleading 0. Show an
-  // explicit "awaiting mark" state instead of a number in that case; once
-  // marketPrices carries the settlement (auto via Massive, or posted by the
-  // desk in Admin > Assets), the real figures render with their as-of date.
+  // No live feed. Gain stays blank until an admin posts a P/L on the holding.
   const awaitingMark = holdings.length > 0 && holdings.every((h) => h.markedAtCost);
   const markAsOf = holdings.find((h) => h.markAsOf)?.markAsOf;
 
@@ -224,7 +220,7 @@ export default function InvestorDashboardPage() {
         {[
           { label: 'Total Value', value: fmt(s.totalValue), sub: pct(s.dayChangePercent), up: s.dayChangePercent >= 0 },
           awaitingMark
-            ? { label: 'Total Gain', value: '—', sub: 'Awaiting daily settlement mark', up: true }
+            ? { label: 'Total Gain', value: '—', sub: 'Waiting for an admin P/L update', up: true }
             : {
                 label: 'Total Gain',
                 value: fmt(s.totalGain),
@@ -233,7 +229,7 @@ export default function InvestorDashboardPage() {
               },
           { label: 'Holdings', value: String(s.holdingsCount), sub: 'Active positions', up: true },
           awaitingMark
-            ? { label: 'Performance', value: '—', sub: 'Awaiting daily settlement mark', up: true }
+            ? { label: 'Performance', value: '—', sub: 'Waiting for an admin P/L update', up: true }
             : { label: 'Performance', value: pct(s.totalGainPercent), sub: 'Based on active holdings', up: s.totalGainPercent >= 0 },
         ].map(({ label, value, sub, up }, i) => (
           <div key={label} className="sg-card p-4" style={{ borderRadius: 14 }}>

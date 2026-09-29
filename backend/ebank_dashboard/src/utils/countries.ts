@@ -255,17 +255,61 @@ export const countries: Country[] = [
   { code: 'ZW', name: 'Zimbabwe' }
 ];
 
-// Helper function to search countries by name or code
-export const searchCountries = (query: string): Country[] => {
-  if (!query || query.length < 3) return [];
-  
-  const searchTerm = query.toLowerCase().trim();
-  
-  return countries.filter(country => 
-    country.name.toLowerCase().includes(searchTerm) ||
-    country.code.toLowerCase().includes(searchTerm)
-  ).slice(0, 10); // Limit to 10 results for better UX
+// Everyday names people type that are not the official English name or ISO code.
+const COUNTRY_ALIASES: Record<string, string[]> = {
+  US: ['usa', 'us', 'america', 'united states of america', 'u.s.', 'u.s.a.'],
+  GB: ['uk', 'u.k.', 'britain', 'great britain', 'england', 'scotland', 'wales'],
+  AE: ['uae', 'u.a.e.', 'emirates'],
+  KR: ['south korea', 'korea', 'republic of korea'],
+  KP: ['north korea', 'dprk'],
+  RU: ['russia'],
+  CZ: ['czech republic'],
+  NL: ['holland'],
+  VN: ['viet nam'],
+  CI: ['ivory coast'],
+  MK: ['north macedonia'],
+  TR: ['turkiye'],
+  MM: ['burma'],
+  CD: ['drc', 'dr congo'],
 };
+
+function fold(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// Ranked match so "USA", "UK", and "UAE" resolve on the first characters,
+// and a short code is not hidden behind a minimum length.
+export function matchCountries(list: Country[], query: string): Country[] {
+  const term = fold(query);
+  if (!term) return [];
+  const compact = term.replace(/ /g, '');
+
+  const scored = list.flatMap((country) => {
+    const name = fold(country.name);
+    const code = country.code.toLowerCase();
+    const aliases = (COUNTRY_ALIASES[country.code] ?? []).map(fold);
+    let score = 0;
+    if (code === compact) score = 100;
+    else if (aliases.some((alias) => alias.replace(/ /g, '') === compact)) score = 90;
+    else if (name.startsWith(term)) score = 80;
+    else if (aliases.some((alias) => alias.startsWith(term))) score = 70;
+    else if (name.split(' ').some((word) => word.startsWith(term))) score = 65;
+    else if (compact.length >= 2 && code.startsWith(compact)) score = 55;
+    else if (term.length >= 3 && name.includes(term)) score = 60;
+    else if (term.length >= 3 && aliases.some((alias) => alias.includes(term))) score = 50;
+    return score > 0 ? [{ country, score }] : [];
+  });
+
+  scored.sort((a, b) => b.score - a.score || a.country.name.localeCompare(b.country.name));
+  return scored.map((entry) => entry.country);
+}
+
+export const searchCountries = (query: string): Country[] => matchCountries(countries, query).slice(0, 20);
 
 // Get country by code
 export const getCountryByCode = (code: string): Country | undefined => {

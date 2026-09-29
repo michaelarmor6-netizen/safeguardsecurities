@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { InvestorAuthProvider, useInvestorAuth } from './contexts/InvestorAuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ClerkGate } from './components/auth/ClerkGate';
 import InvestorAdminLayout from './components/Layout/InvestorAdminLayout';
 import InvestorWorkspaceLayout from './components/Layout/InvestorWorkspaceLayout';
 import InvestorLoginPage from './pages/investor/InvestorLoginPage';
@@ -166,20 +167,22 @@ function SafeguardRoutes() {
 export default function SafeguardApp() {
   return (
     <ThemeProvider>
-      <InvestorAuthProvider>
-        <SafeguardRoutes />
-        <Toaster
-          position="top-right"
-          toastOptions={{
-            style: {
-              background: 'var(--sg-bg-elevated)',
-              color: 'var(--sg-text)',
-              border: '1px solid var(--sg-border)',
-              fontFamily: 'var(--sg-font-body)',
-            },
-          }}
-        />
-      </InvestorAuthProvider>
+      <ClerkGate>
+        <InvestorAuthProvider>
+          <SafeguardRoutes />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: {
+                background: 'var(--sg-bg-elevated)',
+                color: 'var(--sg-text)',
+                border: '1px solid var(--sg-border)',
+                fontFamily: 'var(--sg-font-body)',
+              },
+            }}
+          />
+        </InvestorAuthProvider>
+      </ClerkGate>
     </ThemeProvider>
   );
 }

@@ -1,17 +1,16 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, Check, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { Check, Eye, EyeOff, Lock, Mail, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useInvestorAuth } from '../../contexts/InvestorAuthContext';
 import { getFirebaseAuthErrorMessage } from '../../lib/firebaseAuthErrors';
 import { isSuperAdminEmail } from '../../lib/investorRoles';
-import { checkEmailAvailable } from '../../services/investor/investorAccountService';
 import ThemeToggle from '../../components/ui/ThemeToggle';
 import { auth } from '../../config/firebase';
 import { recordReferral } from '../../services/investor/referralService';
 import { isPlausibleReferralCode } from '../../lib/referralCodes';
-
-type EmailStatus = 'idle' | 'checking' | 'available' | 'taken';
+import { isClerkAuthEnabled } from '../../lib/clerk';
+import { ClerkSignupForm } from '../../components/auth/ClerkSignupForm';
 
 const bullets = [
   'Quick signup with your email and a password',
@@ -32,8 +31,6 @@ export default function InvestorSignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [emailStatus, setEmailStatus] = useState<EmailStatus>('idle');
-  const emailCheckToken = useRef(0);
 
   if (loading) {
     return (
@@ -53,24 +50,6 @@ export default function InvestorSignupPage() {
     return <Navigate to="/activation" replace />;
   }
 
-  const runEmailCheck = async (value: string) => {
-    const candidate = value.trim().toLowerCase();
-    if (!candidate || !candidate.includes('@') || isSuperAdminEmail(candidate)) {
-      setEmailStatus('idle');
-      return;
-    }
-    const token = ++emailCheckToken.current;
-    setEmailStatus('checking');
-    try {
-      const available = await checkEmailAvailable(candidate);
-      if (token !== emailCheckToken.current) return; // stale response, user kept typing
-      setEmailStatus(available ? 'available' : 'taken');
-    } catch {
-      if (token !== emailCheckToken.current) return;
-      setEmailStatus('idle');
-    }
-  };
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSuperAdminEmail(email)) {
@@ -83,14 +62,10 @@ export default function InvestorSignupPage() {
     }
     setBusy(true);
     try {
-      // Re-verify right before creating the account, not just on blur - the
-      // email field could've been edited after the last check settled.
-      const available = await checkEmailAvailable(email);
-      if (!available) {
-        setEmailStatus('taken');
-        toast.error('This email is already registered. Try signing in instead.');
-        return;
-      }
+      // Account creation is Firebase Auth plus a direct Firestore profile write.
+      // A taken email comes back as auth/email-already-in-use. Do not call
+      // checkEmailAvailable here: that callable runs on Cloud Run, which stays
+      // down whenever the Google billing account is closed.
       await signUp(email, password);
 
       // Attribute the referral once the account exists, so we can prove who is
@@ -189,6 +164,7 @@ export default function InvestorSignupPage() {
               Just your email and a password to get started.
             </p>
 
+            {isClerkAuthEnabled() ? <ClerkSignupForm /> : (
             <form onSubmit={submit} className="mt-8 space-y-5">
               <div>
                 <label className="text-sm" style={{ color: 'var(--sg-muted)' }}>
@@ -200,35 +176,11 @@ export default function InvestorSignupPage() {
                     type="email"
                     required
                     value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setEmailStatus('idle');
-                    }}
-                    onBlur={(e) => runEmailCheck(e.target.value)}
+                    onChange={(e) => setEmail(e.target.value)}
                     placeholder="Enter your email"
                     className="sg-input sg-input-icon-left"
-                    style={emailStatus === 'taken' ? { borderColor: 'var(--sg-danger)' } : undefined}
-                    aria-invalid={emailStatus === 'taken'}
                   />
                 </div>
-                {emailStatus === 'checking' && (
-                  <p className="text-xs mt-1.5" style={{ color: 'var(--sg-muted-2)' }}>Checking availability...</p>
-                )}
-                {emailStatus === 'taken' && (
-                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--sg-danger)' }}>
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                    This email is already registered.{' '}
-                    <Link to="/login" className="underline" style={{ color: 'var(--sg-danger)' }}>
-                      Sign in instead
-                    </Link>
-                  </p>
-                )}
-                {emailStatus === 'available' && (
-                  <p className="text-xs mt-1.5 flex items-center gap-1" style={{ color: 'var(--sg-teal)' }}>
-                    <Check className="h-3.5 w-3.5 shrink-0" />
-                    Available
-                  </p>
-                )}
               </div>
 
               <div>
@@ -275,10 +227,11 @@ export default function InvestorSignupPage() {
                 </div>
               </div>
 
-              <button type="submit" disabled={busy || emailStatus === 'taken'} className="sg-btn-primary w-full">
+              <button type="submit" disabled={busy} className="sg-btn-primary w-full">
                 {busy ? 'Creating account...' : 'Create Account'}
               </button>
             </form>
+            )}
 
             <p className="text-sm mt-5 text-center" style={{ color: 'var(--sg-muted-2)' }}>
               Already have an account?{' '}

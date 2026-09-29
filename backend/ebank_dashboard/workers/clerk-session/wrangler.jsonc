@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "safeguard-clerk-session",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-28",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.01 }
+  },
+  // Non-secret config. Set CLERK_FRONTEND_API to the Clerk Frontend API origin,
+  // for example https://your-app.clerk.accounts.dev (Clerk Dashboard → API keys).
+  // Secrets (wrangler secret put, never commit):
+  //   CLERK_SECRET_KEY, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
+  "vars": {
+    "FIREBASE_PROJECT_ID": "e-bank-dashboard",
+    "CLERK_FRONTEND_API": "https://more-moose-6120.clerk.accounts.dev",
+    "ALLOWED_ORIGINS": "https://app.safeguardsecurities.us,http://localhost:5173,http://127.0.0.1:5173"
+  }
+}

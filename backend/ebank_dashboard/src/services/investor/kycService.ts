@@ -71,8 +71,12 @@ export async function uploadKycDocument(userId: string, file: File): Promise<str
 }
 
 export async function submitKyc(input: Omit<KycSubmission, 'id' | 'status' | 'createdAt'>) {
+  // The ID file is optional. Firestore rejects undefined, so leave idDocumentUrl
+  // off the document when the client did not upload one.
+  const { idDocumentUrl, ...rest } = input;
   return addDoc(collection(db, LIVE_COLLECTIONS.kycSubmissions), {
-    ...input,
+    ...rest,
+    ...(idDocumentUrl ? { idDocumentUrl } : {}),
     status: 'pending',
     createdAt: new Date(),
   });

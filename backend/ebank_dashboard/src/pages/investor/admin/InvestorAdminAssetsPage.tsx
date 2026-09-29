@@ -6,7 +6,6 @@ import {
   getAssetGroups,
   createOrUpdateAsset,
   setAssetTradable,
-  refreshAssetQuote,
   type Asset,
   type AssetClass,
   type AssetGroup,
@@ -102,26 +101,7 @@ export default function InvestorAdminAssetsPage() {
   };
 
   const doRefresh = async (asset: Asset) => {
-    if (!asset.quoteSymbol) {
-      toast.error(`${asset.symbol} has no live quote source (reference-only)`);
-      return;
-    }
-    setRefreshingId(asset.id);
-    try {
-      const quote = await refreshAssetQuote(asset.id);
-      setAssets((prev) =>
-        prev.map((a) =>
-          a.id === asset.id
-            ? { ...a, quote: { price: quote.price, change: quote.change, changePercent: quote.changePercent, fetchedAt: new Date() } }
-            : a,
-        ),
-      );
-      toast.success(`${asset.symbol} refreshed`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to refresh quote');
-    } finally {
-      setRefreshingId(null);
-    }
+    toast(`${asset.symbol}: live quotes are paused. Set the client's P/L from Users.`);
   };
 
   const submitAdd = async (e: React.FormEvent) => {

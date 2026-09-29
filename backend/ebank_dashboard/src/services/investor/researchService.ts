@@ -34,7 +34,6 @@ export interface CompanyResearch {
 
 const getCompanyResearchFn = httpsCallable<{ symbol: string }, CompanyResearch>(functions, 'getCompanyResearch');
 
-export async function getCompanyResearch(symbol: string): Promise<CompanyResearch> {
-  const res = await getCompanyResearchFn({ symbol });
-  return res.data;
+export async function getCompanyResearch(_symbol: string): Promise<CompanyResearch> {
+  throw new Error('Company research is paused.');
 }

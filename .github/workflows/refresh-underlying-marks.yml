@@ -1,12 +1,10 @@
 name: Refresh underlying marks
 
-# Hourly contract marks for client option P/L. Cloud Functions cannot do this
-# while the Firebase project is off the Blaze plan. GitHub's scheduler does
-# not need Blaze. The job quotes the listed contract (not a live tick) and
-# writes marketPrices, which the dashboard already reads.
+# Parked. Client P/L is posted by an admin on the holding, and Cloud Run
+# stays off until the company turns the live feeds back on. This file no
+# longer schedules itself. Re-add the hourly cron only when that feed should
+# run again.
 on:
-  schedule:
-    - cron: '15 * * * *'
   workflow_dispatch:
 
 jobs:

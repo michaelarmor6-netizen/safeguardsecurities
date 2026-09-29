@@ -5,6 +5,7 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
   'auth/wrong-password': 'Incorrect email or password. Use the same account that works on app.safeguardsecurities.us.',
   'auth/user-not-found': 'No account found for this email in SafeGuard Firebase (e-bank-dashboard).',
   'auth/invalid-email': 'Please enter a valid email address.',
+  'auth/email-already-in-use': 'This email is already registered. Try signing in instead.',
   'auth/user-disabled': 'This account has been disabled. Contact support.',
   'auth/too-many-requests': 'Too many attempts. Wait a few minutes and try again.',
   'auth/unauthorized-domain': 'This site is not authorized in Firebase. Add sggwebs.com (and www) under Authentication → Settings → Authorized domains.',

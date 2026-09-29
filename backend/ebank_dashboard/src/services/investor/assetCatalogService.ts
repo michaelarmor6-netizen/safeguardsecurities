@@ -12,8 +12,7 @@ import {
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
-import { db, functions } from '../../config/firebase';
+import { db } from '../../config/firebase';
 import { LIVE_COLLECTIONS } from '../../config/liveCollections';
 
 // Kept in sync with the Asset Type list in Settings -> Trading Configuration
@@ -200,12 +199,6 @@ export async function setAssetActive(id: string, isActive: boolean) {
   await updateDoc(doc(db, LIVE_COLLECTIONS.assets, id), { isActive, updatedAt: new Date() });
 }
 
-const getAssetQuoteFn = httpsCallable<{ symbol: string }, { symbol: string; price: number; change: number; changePercent: number }>(
-  functions,
-  'getAssetQuote',
-);
-
-export async function refreshAssetQuote(symbol: string) {
-  const res = await getAssetQuoteFn({ symbol });
-  return res.data;
+export async function refreshAssetQuote(_symbol: string): Promise<{ symbol: string; price: number; change: number; changePercent: number }> {
+  throw new Error('Live quotes are paused.');
 }

@@ -32,6 +32,8 @@ backend/ebank_dashboard/.env.*
 backend/ebank_dashboard/*.exe
 backend/ebank_dashboard/functions*/lib/
 backend/ebank_dashboard/functions*/.env*
+backend/ebank_dashboard/workers/**/.dev.vars
+backend/ebank_dashboard/workers/**/.wrangler/
 backend/ebank_dashboard/*.tsbuildinfo
 backend/ebank_dashboard/_to_delete/
 backend/ebank_dashboard/.claude/

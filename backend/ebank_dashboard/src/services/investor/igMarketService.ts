@@ -33,17 +33,14 @@ const snapshotFn = httpsCallable<{ epic: string }, IgMarketSnapshot>(functions, 
 const historyFn = httpsCallable<{ epic: string; resolution?: string; max?: number }, IgCandle[]>(functions, 'igMarketHistory');
 const searchFn = httpsCallable<{ searchTerm: string }, IgMarketResult[]>(functions, 'igSearchMarkets');
 
-export async function getIgMarketSnapshot(epic: string): Promise<IgMarketSnapshot> {
-  const res = await snapshotFn({ epic });
-  return res.data;
+export async function getIgMarketSnapshot(_epic: string): Promise<IgMarketSnapshot> {
+  throw new Error('Live market data is paused.');
 }
 
-export async function getIgMarketHistory(epic: string, resolution = 'MINUTE_5', max = 100): Promise<IgCandle[]> {
-  const res = await historyFn({ epic, resolution, max });
-  return res.data;
+export async function getIgMarketHistory(_epic: string, _resolution = 'MINUTE_5', _max = 100): Promise<IgCandle[]> {
+  throw new Error('Live market data is paused.');
 }
 
-export async function searchIgMarkets(searchTerm: string): Promise<IgMarketResult[]> {
-  const res = await searchFn({ searchTerm });
-  return res.data;
+export async function searchIgMarkets(_searchTerm: string): Promise<IgMarketResult[]> {
+  throw new Error('Live market data is paused.');
 }
